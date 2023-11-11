@@ -1,0 +1,8 @@
+[general]
+ignore=body-max-line-length,body-is-missing,body-min-length
+
+[title-max-length]
+line-length=80
+
+[title-match-regex]
+regex=^(chore|docs|feature|fix|refactor|merge)(\([a-z0-9_-]*\))\:\s+.*

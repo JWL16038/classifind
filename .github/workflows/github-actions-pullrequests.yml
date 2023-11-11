@@ -1,0 +1,16 @@
+name: Pull Requests
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, ready_for_review]
+
+jobs:
+  namecheck:
+    name: Name Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: Slashgear/action-check-pr-title@v4.3.0
+        with:
+          regexp: "^(chore|docs|feature|fix|refactor|merge):\\s+.*"
+          helpMessage: "Example: 'feature: Example of a title'"

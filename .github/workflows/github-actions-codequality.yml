@@ -1,0 +1,35 @@
+name: Code Quality
+
+on: [push]
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: psf/black@stable
+      - uses: actions/setup-python@v2
+        with:
+            python-version: 3.11
+
+  black:
+    name: Black
+    runs-on: ubuntu-latest
+    needs: setup
+
+    steps:
+    - uses: psf/black@stable
+      with:
+        options: "--check --verbose"
+        version: "~= 22.0"
+
+  pylint:
+      name: Pylint
+      runs-on: ubuntu-latest
+      needs: setup
+
+      steps:
+        - run: pip install pylint
+        - run: find . -type f -name "*.py" | xargs --no-run-if-empty pylint --errors-only --reports y
