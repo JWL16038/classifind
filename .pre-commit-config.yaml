@@ -30,9 +30,12 @@ repos:
             ".pylintrc",
             "--fail-on",
             "F",
+            "--fail-on",
             "E",
             "--reports", # Only display messages
             "n",
             "--score", # Don't display the score
             "n",
+            "--disable",
+            "import-error",
             ]
