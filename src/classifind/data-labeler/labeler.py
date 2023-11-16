@@ -8,10 +8,18 @@ import logging
 import pandas as pd
 from metadata_scraper import process_files
 
-ABSOLUTE_PATH = Path().resolve().parent.parent
+# =====================================
+# Paths
+# =====================================
+ABSOLUTE_PATH = Path().resolve().parent.parent.parent
 RELATIVE_PATH = Path("data/raw/classical_music_files")
+RELATIVE_PROCESSED_PATH = Path("data/processed")
 FULL_RAW_PATH = ABSOLUTE_PATH / RELATIVE_PATH
+FULL_PROCESSED_PATH = ABSOLUTE_PATH / RELATIVE_PROCESSED_PATH
 
+# =====================================
+# Regex patterns
+# =====================================
 COMPOSER_PATTERN = r"Mozart|Beethoven|Bach|Ravel"
 COMPOSITION_PATTERN = r"Sonata|Concerto|String|Quartet|Quintet|Symphony|Trio|Suite|Prelude|Fugue|\
     Variations|Overture|Rondo|Fantasy|Opera|Divermento|Serenade|Ballet"
@@ -219,8 +227,10 @@ def save_csv(dataframe):
     Saves the data as a CSV
     """
     try:
-        dataframe.to_csv(os.path.join(FULL_RAW_PATH, "metadata.csv"), index=False)
-        logging.info("Metadata saved successfully to {FULL_RAW_PATH}/metadata.csv")
+        dataframe.to_csv(os.path.join(FULL_PROCESSED_PATH, "metadata.csv"), index=False)
+        logging.info(
+            "Metadata saved successfully to %s/metadata.csv", FULL_PROCESSED_PATH
+        )
     except OSError as error:
         logging.error("Saving metadata failed! %s", str(error))
 

@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 import eyed3
 
-ABSOLUTE_PATH = Path().resolve().parent.parent
+ABSOLUTE_PATH = Path().resolve().parent.parent.parent
 RELATIVE_PATH = Path("data/raw/classical_music_files")
 FULL_RAW_PATH = ABSOLUTE_PATH / RELATIVE_PATH
 
@@ -61,12 +61,14 @@ def extract_audio_metadata(file_path):
     """
     try:
         combined_path = FULL_RAW_PATH / file_path
-        modified_path = parse_longpath(combined_path)
-        audiofile = eyed3.load(modified_path)
+        print(os.name == "nt")
+        if os.name == "nt":
+            combined_path = parse_longpath(combined_path)
+        audiofile = eyed3.load(combined_path)
         tag = audiofile.tag
         return tag.title, tag.artist, tag.album
     except OSError as error:
-        raise f"Fail: {error}"
+        raise error
 
 
 def process_files():
