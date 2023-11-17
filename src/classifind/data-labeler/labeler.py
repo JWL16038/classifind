@@ -53,7 +53,7 @@ def extract_composer(file):
         composer_result = re.search(COMPOSER_PATTERN, entry, re.IGNORECASE)
         if composer_result is not None:
             return composer_result.group(0).lower().capitalize()
-    logging.warning("No composer found for %s", file.title)
+    logging.debug("No composer found for %s", file.title)
     return None
 
 
@@ -67,7 +67,7 @@ def extract_composition(title):
         matches = list(map(lambda s: s.capitalize(), composition_result))
         matches = list(dict.fromkeys(matches))
         return ", ".join(matches)
-    logging.warning("No composition found for %s", title)
+    logging.debug("No composition found for %s", title)
     return None
 
 
@@ -89,7 +89,7 @@ def extract_composition_no(title):
     )
     if composition_no_result is not None:
         return composition_no_result.group(0)
-    logging.warning("No composition number found for %s", title)
+    logging.debug("No composition number found for %s", title)
     return None
 
 
@@ -101,7 +101,7 @@ def extract_nickname(title):
     nickname_result = re.search(NICKNAME_PATTERN, title, re.IGNORECASE)
     if nickname_result is not None:
         return nickname_result.group(0)
-    logging.warning("No nickname found for %s", title)
+    logging.debug("No nickname found for %s", title)
     return None
 
 
@@ -119,7 +119,7 @@ def extract_workno(title):
         if number_result:
             return f"{result.group(0)}, {number_result.group(0)}"
         return result.group(0)
-    logging.warning("No work number found for %s", title)
+    logging.debug("No work number found for %s", title)
     return None
 
 
@@ -140,7 +140,7 @@ def extract_movement(title):
     movement_result = re.search(MOVEMENT_PATTERN, title, re.IGNORECASE)
     if movement_result is not None:
         return movement_result.group(0)
-    logging.warning("No movement found for %s", title)
+    logging.debug("No movement found for %s", title)
     return None
 
 
@@ -152,7 +152,7 @@ def extract_key(title):
     key_result = re.search(KEY_PATTERN, title, re.IGNORECASE)
     if key_result is not None:
         return key_result.group(0)
-    logging.warning("No key found for %s", title)
+    logging.debug("No key found for %s", title)
     return None
 
 
@@ -166,7 +166,7 @@ def extract_instruments(title):
         matches = list(map(lambda s: s.capitalize(), result))
         matches = list(dict.fromkeys(matches))
         return ", ".join(matches)
-    logging.warning("No instrument(s) found for %s", title)
+    logging.debug("No instrument(s) found for %s", title)
     return None
 
 
@@ -193,7 +193,7 @@ def label_data():
         filename = str(path.name)
         # If the metadata of an audio file is completely empty, we will skip it
         if all(v is None for v in [file.artist, file.title, file.album]):
-            logging.warning("Skipping %s because its metadata is empty", filename)
+            logging.debug("Skipping %s because its metadata is empty", filename)
             continue
         composer = extract_composer(file)
         composition = extract_composition(file.title)
