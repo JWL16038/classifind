@@ -8,7 +8,7 @@ import eyed3
 
 ABSOLUTE_PATH = Path().resolve().parent.parent.parent
 RELATIVE_PATH = Path("data/raw/classical_music_files")
-FULL_RAW_PATH = ABSOLUTE_PATH / RELATIVE_PATH
+FULL_RAW_PATH = ABSOLUTE_PATH.joinpath(RELATIVE_PATH)
 
 audio_extensions = [".mp3", ".wav", ".flac"]
 
@@ -60,15 +60,15 @@ def extract_audio_metadata(file_path):
     Extracts metadata information from the audio file
     """
     try:
-        combined_path = FULL_RAW_PATH / file_path
-        print(os.name == "nt")
+        combined_path = FULL_RAW_PATH.joinpath(file_path)
         if os.name == "nt":
             combined_path = parse_longpath(combined_path)
         audiofile = eyed3.load(combined_path)
         tag = audiofile.tag
         return tag.title, tag.artist, tag.album
-    except OSError as error:
-        raise error
+    except (IOError, OSError) as error:
+        logging.error("Loading audio file with path %s failed: %s", file_path, error)
+        return None, None, None
 
 
 def process_files():
