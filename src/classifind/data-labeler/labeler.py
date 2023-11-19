@@ -1,6 +1,7 @@
 """
 Data Labeler
 """
+import argparse
 import os
 import re
 from pathlib import Path
@@ -20,7 +21,7 @@ FULL_PROCESSED_PATH = ABSOLUTE_PATH / RELATIVE_PROCESSED_PATH
 # =====================================
 # Regex patterns
 # =====================================
-COMPOSER_PATTERN = r"Mozart|Beethoven|Bach|Ravel"
+COMPOSER_PATTERN = r"Mozart|Beethoven|Bach"
 COMPOSITION_PATTERN = r"Sonata|Concerto|String|Quartet|Quintet|Symphony|Trio|Suite|Prelude|Fugue|\
     Variations|Overture|Rondo|Fantasy|Opera|Divermento|Serenade|Ballet"
 COMPOSITION_NUMBER = r"((?:No)(?:.)?\s?\d+)|((?:Nos)(?:.)?\s?\d+\sand\s\d+)|\
@@ -170,7 +171,7 @@ def extract_instruments(title):
     return None
 
 
-def label_data():
+def label_data(args):
     """
     Label the audio files
     """
@@ -179,43 +180,46 @@ def label_data():
         "filename",
         "title",
         "composer",
-        "composition",
-        "composition_number",
-        "nickname",
-        "workno",
-        "key",
-        "movement",
-        "instruments",
     ]
     files_df = pd.DataFrame(columns=columns)
     for _, (path, file) in enumerate(process_files()):
-        file_path = str(path.parent)
-        filename = str(path.name)
         # If the metadata of an audio file is completely empty, we will skip it
         if all(v is None for v in [file.artist, file.title, file.album]):
-            logging.debug("Skipping %s because its metadata is empty", filename)
+            logging.debug("Skipping %s because its metadata is empty", str(path.name))
             continue
         composer = extract_composer(file)
-        composition = extract_composition(file.title)
-        composition_number = extract_composition_no(file.title)
-        nickname = extract_nickname(file.title)
-        worknumber = extract_workno(file.title)
-        key = extract_key(file.title)
-        movement = extract_movement(file.title)
-        instruments = extract_instruments(file.title)
         new_row = {
-            "path": file_path,
-            "filename": filename,
+            "path": str(path.parent),
+            "filename": str(path.name),
             "title": file.title,
             "composer": composer,
-            "composition": composition,
-            "composition_number": composition_number,
-            "nickname": nickname,
-            "workno": worknumber,
-            "key": key,
-            "movement": movement,
-            "instruments": instruments,
         }
+        if args.composition:
+            composition = extract_composition(file.title)
+            composition_number = extract_composition_no(file.title)
+            columns.extend(["composition", "composition_number"])
+            new_row["composition"] = composition
+            new_row["composition_number"] = composition_number
+        if args.nickname:
+            nickname = extract_nickname(file.title)
+            columns.append("nickname")
+            new_row["nickname"] = nickname
+        if args.worknumber:
+            worknumber = extract_workno(file.title)
+            columns.append("workno")
+            new_row["workno"] = worknumber
+        if args.key:
+            key = extract_key(file.title)
+            columns.append("key")
+            new_row["key"] = key
+        if args.movement:
+            movement = extract_movement(file.title)
+            columns.append("movement")
+            new_row["movement"] = movement
+        if args.instruments:
+            instruments = extract_instruments(file.title)
+            columns.append("instruments")
+            new_row["instruments"] = instruments
         files_df = pd.concat([files_df, pd.DataFrame([new_row])], ignore_index=True)
     files_df = files_df.fillna("")
     logging.info("Processed %d music files", len(files_df))
@@ -235,10 +239,70 @@ def save_csv(dataframe):
         logging.error("Saving metadata failed! %s", str(error))
 
 
+def to_bool(flag):
+    """
+    Converts the T/F, 1/0, or Y/N flag into a boolean
+    """
+    if flag.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    if flag.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    raise argparse.ArgumentTypeError("Boolean value expected.")
+
+
+def process_cmdline_options():
+    """
+    Parses all the command line options
+    """
+    parser = argparse.ArgumentParser(
+        description="Automatically label all music files and store the results as a CSV file."
+    )
+    # parser.add_argument('--supplementary', default=None,
+    # help='supplementary files to include in the submission')
+    parser.add_argument(
+        "--composition",
+        default=False,
+        action="store_true",
+        help="Adds the composition title and number to the output.",
+    )
+    parser.add_argument(
+        "--nickname",
+        default=False,
+        action="store_true",
+        help="Adds the nickname of the work to the output (if applicable).",
+    )
+    parser.add_argument(
+        "--worknumber",
+        default=False,
+        action="store_true",
+        help="Adds the number of the work to the output (if applicable).",
+    )
+    parser.add_argument(
+        "--key",
+        default=False,
+        action="store_true",
+        help="Adds the key of the work to the output (if applicable)",
+    )
+    parser.add_argument(
+        "--movement",
+        default=False,
+        action="store_true",
+        help="Adds the movement of the work to the output (if applicable)",
+    )
+    parser.add_argument(
+        "--instruments",
+        default=False,
+        action="store_true",
+        help="Adds the instrument(s) of the work to the output (if applicable)",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         format="[%(asctime)s] %(levelname)s: %(message)s", level=logging.INFO
     )
     logging.info("Loading music data labeler")
-    df = label_data()
+    arguments = process_cmdline_options()
+    df = label_data(arguments)
     save_csv(df)
