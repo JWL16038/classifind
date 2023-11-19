@@ -43,7 +43,7 @@ INSTRUMENT_PATTERN = r"\b(Piano|Keyboard|Organ|Guitar|Violin|Viola|Cello|\
     Horn|Trombone|Tuba|Saxophone|Timpani|Harp|Recorder|Bagpipes|Ukulele)(?:s)?\b"
 
 
-def extract_composer(file):
+def extract_composer(file, file_path):
     """
     Extracts composer information from the file metadata.
 
@@ -54,8 +54,11 @@ def extract_composer(file):
         composer_result = re.search(COMPOSER_PATTERN, entry, re.IGNORECASE)
         if composer_result is not None:
             return composer_result.group(0).lower().capitalize()
-    logging.debug("No composer found for %s", file.title)
-    return None
+    logging.debug(
+        "No composer found for %s, falling back to searching in file path", file.title
+    )
+    composer_result = re.search(COMPOSER_PATTERN, file_path, re.IGNORECASE)
+    return composer_result.group(0).lower().capitalize()
 
 
 def extract_composition(title):
@@ -187,7 +190,7 @@ def label_data(args):
         if all(v is None for v in [file.artist, file.title, file.album]):
             logging.debug("Skipping %s because its metadata is empty", str(path.name))
             continue
-        composer = extract_composer(file)
+        composer = extract_composer(file, str(path.parent))
         new_row = {
             "path": str(path.parent),
             "filename": str(path.name),
