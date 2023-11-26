@@ -1,5 +1,9 @@
 .vscode
 
+data/raw/classical_music_files
+
+*.csv
+
 # Audio files
 *.wav
 *.mp3
