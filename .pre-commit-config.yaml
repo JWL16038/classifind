@@ -26,6 +26,8 @@ repos:
         types: [python]
         args:
             [
+            "--rcfile",
+            ".pylintrc",
             "--fail-on",
             "F",
             "E",
