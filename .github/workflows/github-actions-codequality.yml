@@ -33,4 +33,4 @@ jobs:
       steps:
         - run: pip install pylint
         - run: pip install eyed3
-        - run: find . -type f -name "*.py" | xargs --no-run-if-empty pylint --rcfile=".pylintrc" --fail-on=F,E --reports=n --score=n --disable=import-error
+        - run: find . -type f -name "*.py" | xargs --no-run-if-empty pylint --rcfile=".pylintrc" --fail-on=F,E --disable=import-error
