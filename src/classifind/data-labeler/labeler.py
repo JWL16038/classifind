@@ -8,13 +8,14 @@ from pathlib import Path
 import logging
 import pandas as pd
 from metadata_scraper import process_files
+from sklearn.preprocessing import LabelEncoder
 
 # =====================================
 # Paths
 # =====================================
 ABSOLUTE_PATH = Path().resolve().parent.parent.parent
 RELATIVE_PATH = Path("data/raw/classical_music_files")
-RELATIVE_PROCESSED_PATH = Path("data/processed")
+RELATIVE_PROCESSED_PATH = Path("data/processed/classical_music_files")
 FULL_RAW_PATH = ABSOLUTE_PATH / RELATIVE_PATH
 FULL_PROCESSED_PATH = ABSOLUTE_PATH / RELATIVE_PROCESSED_PATH
 
@@ -225,6 +226,9 @@ def label_data(args):
             new_row["instruments"] = instruments
         files_df = pd.concat([files_df, pd.DataFrame([new_row])], ignore_index=True)
     files_df = files_df.fillna("")
+    labeler = LabelEncoder()
+    composer_enc = labeler.fit_transform(files_df.loc[:, "composer"])
+    files_df["composer_enc"] = composer_enc
     logging.info("Processed %d music files", len(files_df))
     return files_df
 
@@ -260,8 +264,6 @@ def process_cmdline_options():
     parser = argparse.ArgumentParser(
         description="Automatically label all music files and store the results as a CSV file."
     )
-    # parser.add_argument('--supplementary', default=None,
-    # help='supplementary files to include in the submission')
     parser.add_argument(
         "--composition",
         default=False,
