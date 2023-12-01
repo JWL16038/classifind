@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from classifind.utils.dataset import ClassicalMusicDataset, MusicData
+from classifind.dataset import ClassicalMusicDataset, MusicData
 
 N_FFT = 2048
 HOP_LENGTH = 512
 
-ABSOLUTE_PATH = Path().resolve().parent.parent.parent
+ABSOLUTE_PATH = Path().resolve().parent.parent
 RAW_PATH = Path("data/raw/classical_music_files")
 PROCESSED_PATH = Path("data/processed")
 FULL_RAW_PATH = ABSOLUTE_PATH.joinpath(RAW_PATH)
