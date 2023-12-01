@@ -1,15 +1,13 @@
 """
 Feature extractor
 """
-import os
-import logging
 from pathlib import Path
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from classifind.dataset import ClassicalMusicDataset, MusicData
+
+# from classifind.dataset import ClassicalMusicDataset, MusicData
 
 N_FFT = 2048
 HOP_LENGTH = 512
@@ -90,54 +88,3 @@ def visualise_mfccs(musicdata, scale=False):
     librosa.display.specshow(mfccs, sr=musicdata.sample_rate, x_axis="time")
     plt.colorbar(format="%+2.0f dB")
     plt.show()
-
-
-def process_audiofiles(dataframe):
-    """
-    Processes all the audio files that are listed in the CSV file through Librosa
-    """
-    dataset = ClassicalMusicDataset()
-    for _, row in dataframe.iterrows():
-        filename = row["filename"]
-        composer = row["composer"]
-        composer_enc = row["composer_enc"]
-        path = FULL_RAW_PATH.joinpath(row["path"], filename)
-        logging.info("Processing: %s", filename)
-        timeseries, sample_rate = librosa.load(path)
-        musicdata = MusicData(filename, composer, composer_enc, timeseries, sample_rate)
-        dataset.add_instance(musicdata)
-    return dataset
-
-
-def read_metadata():
-    """
-    Reads in the metadata CSV
-    """
-    logging.info("Reading in metadata...")
-    try:
-        csv = pd.read_csv(
-            os.path.join(FULL_PROCESSED_PATH, "classical_music_files/metadata.csv")
-        )
-        # Temporary code to grab 1% of the dataset for testing purposes
-        csv = csv.sample(frac=0.01, random_state=0)
-        return csv
-    except IOError as error:
-        raise error
-
-
-def run():
-    """
-    Executes the feature extractor
-    """
-    df = read_metadata()
-    data = process_audiofiles(df)
-    print(data.num_instances())
-    visualise_mfccs(data.get_instance(0))
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        format="[%(asctime)s] %(levelname)s: %(message)s", level=logging.INFO
-    )
-    logging.info("Loading feature extractor")
-    run()

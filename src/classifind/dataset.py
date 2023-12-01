@@ -26,6 +26,14 @@ class ClassicalMusicDataset:
         index = len(self.dataset)
         self.dataset[index] = musicdata
 
+    def add_segments(self, segments):
+        """
+        Adds segments of an audio file (via split_audiofile)
+        """
+        for i in segments:
+            index = len(self.dataset)
+            self.dataset[index] = i
+
     def get_instance(self, index):
         """
         Gets an instance by index
@@ -39,12 +47,25 @@ class MusicData:
     duration (in ms) and tempo (in BPMs)
     """
 
-    def __init__(self, title, composer, composer_enc, timeseries, sample_rate):
+    def __init__(
+        self,
+        title,
+        seg_no,
+        composer,
+        composer_enc,
+        timeseries,
+        sample_rate,
+        start_time,
+        end_time,
+    ):
         self.title = title
+        self.segment_no = seg_no
         self.composer = composer
         self.composer_encoded = composer_enc
         self.timeseries = timeseries
         self.sample_rate = sample_rate
+        self.start_time = start_time
+        self.end_time = end_time
 
     def get_tempo(self):
         """
