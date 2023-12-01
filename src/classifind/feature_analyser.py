@@ -100,10 +100,11 @@ def process_audiofiles(dataframe):
     for _, row in dataframe.iterrows():
         filename = row["filename"]
         composer = row["composer"]
+        composer_enc = row["composer_enc"]
         path = FULL_RAW_PATH.joinpath(row["path"], filename)
         logging.info("Processing: %s", filename)
         timeseries, sample_rate = librosa.load(path)
-        musicdata = MusicData(filename, composer, timeseries, sample_rate)
+        musicdata = MusicData(filename, composer, composer_enc, timeseries, sample_rate)
         dataset.add_instance(musicdata)
     return dataset
 
@@ -131,6 +132,7 @@ def run():
     df = read_metadata()
     data = process_audiofiles(df)
     print(data.num_instances())
+    visualise_mfccs(data.get_instance(0))
 
 
 if __name__ == "__main__":
