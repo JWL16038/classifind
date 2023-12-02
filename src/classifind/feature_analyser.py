@@ -5,9 +5,6 @@ from pathlib import Path
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-
-# from classifind.dataset import ClassicalMusicDataset, MusicData
 
 N_FFT = 2048
 HOP_LENGTH = 512
@@ -19,7 +16,33 @@ FULL_RAW_PATH = ABSOLUTE_PATH.joinpath(RAW_PATH)
 FULL_PROCESSED_PATH = ABSOLUTE_PATH.joinpath(PROCESSED_PATH)
 
 
-def visualise_waveform(musicdata):
+def calculate_constantq_transform(musicdata, visualise=False):
+    """
+    Visualises the Constant-Q Transform
+    """
+    hop_length = 512
+    cqt = librosa.cqt(
+        musicdata.timeseries, sr=musicdata.sample_rate, n_bins=72, hop_length=hop_length
+    )
+
+    log_cqt = librosa.amplitude_to_db(np.abs(cqt))
+    if visualise:
+        fig, axes = plt.subplots(figsize=(15, 5))
+        img = librosa.display.specshow(
+            log_cqt,
+            sr=musicdata.sample_rate,
+            x_axis="time",
+            y_axis="cqt_note",
+            cmap="coolwarm",
+            ax=axes,
+        )
+        axes.set_title("Constant-Q power spectrum")
+        fig.colorbar(img, ax=axes, format="%+2.0f dB")
+        plt.show()
+    return log_cqt
+
+
+def plot_waveform(musicdata):
     """
     Visualises the wave of the plot
     """
@@ -32,14 +55,14 @@ def visualise_waveform(musicdata):
     plt.show()
 
 
-def visualise_spectrum(musicdata):
+def plot_spectrum(musicdata):
     """
     Visualises the spectrum
     """
-    plt.figure(figsize=(12, 4))
     fourier_transform = np.abs(
         librosa.stft(musicdata.timeseries[:N_FFT], hop_length=N_FFT + 1)
     )
+    plt.figure(figsize=(12, 4))
     plt.plot(fourier_transform)
     plt.title("Spectrum")
     plt.xlabel("Frequency Bin")
@@ -47,7 +70,7 @@ def visualise_spectrum(musicdata):
     plt.show()
 
 
-def visualise_spectogram(musicdata, log=False):
+def plot_spectogram(musicdata, log=False):
     """
     Visualises the spectrogram
     """
@@ -74,7 +97,7 @@ def visualise_spectogram(musicdata, log=False):
     plt.show()
 
 
-def visualise_mfccs(musicdata, scale=False):
+def calculate_mfccs(musicdata, visualise=False):
     """
     Visualises the Mel-frequency cepstral coefficients (MFCC) plot
     """
@@ -82,9 +105,8 @@ def visualise_mfccs(musicdata, scale=False):
     mfccs = librosa.feature.mfcc(
         y=musicdata.timeseries, sr=musicdata.sample_rate, n_mfcc=13
     )  # computed MFCCs over frames.
-    if scale:
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        mfccs = scaler.fit_transform(mfccs)
-    librosa.display.specshow(mfccs, sr=musicdata.sample_rate, x_axis="time")
-    plt.colorbar(format="%+2.0f dB")
-    plt.show()
+    if visualise:
+        librosa.display.specshow(mfccs, sr=musicdata.sample_rate, x_axis="time")
+        plt.colorbar(format="%+2.0f dB")
+        plt.show()
+    return mfccs
