@@ -5,54 +5,58 @@ from pathlib import Path
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+from torchaudio import functional, transforms
 
 N_FFT = 2048
 HOP_LENGTH = 512
 
 ABSOLUTE_PATH = Path().resolve().parent.parent
 RAW_PATH = Path("data/raw/classical_music_files")
-PROCESSED_PATH = Path("data/processed")
+PROCESSED_PATH = Path("data/processed/classical_music_files")
 FULL_RAW_PATH = ABSOLUTE_PATH.joinpath(RAW_PATH)
 FULL_PROCESSED_PATH = ABSOLUTE_PATH.joinpath(PROCESSED_PATH)
 
 
-def calculate_constantq_transform(musicdata, visualise=False):
-    """
-    Visualises the Constant-Q Transform
-    """
-    hop_length = 512
-    cqt = librosa.cqt(
-        musicdata.timeseries, sr=musicdata.sample_rate, n_bins=72, hop_length=hop_length
-    )
-
-    log_cqt = librosa.amplitude_to_db(np.abs(cqt))
-    if visualise:
-        fig, axes = plt.subplots(figsize=(15, 5))
-        img = librosa.display.specshow(
-            log_cqt,
-            sr=musicdata.sample_rate,
-            x_axis="time",
-            y_axis="cqt_note",
-            cmap="coolwarm",
-            ax=axes,
-        )
-        axes.set_title("Constant-Q power spectrum")
-        fig.colorbar(img, ax=axes, format="%+2.0f dB")
-        plt.show()
-    return log_cqt
-
-
-def plot_waveform(musicdata):
+def plot_waveform(waveform, sample_rate):
     """
     Visualises the wave of the plot
     """
-    _, axes = plt.subplots()
-    librosa.display.waveshow(
-        y=musicdata.timeseries, sr=musicdata.sample_rate, color="blue", axis="time"
-    )
+    waveform = waveform.numpy()
+
+    num_channels, num_frames = waveform.shape
+    time_axis = torch.arange(0, num_frames) / sample_rate
+
+    _, axes = plt.subplots(num_channels, 1)
+    axes.plot(time_axis, waveform[0], linewidth=1)
+    axes.grid(True)
+    axes.set_xlim([0, time_axis[-1]])
     axes.set_xlabel("Time (seconds)")
-    axes.set_title(f"Timeseries plot for {musicdata.title}")
+    axes.set_title("Waveform plot")
     plt.show()
+
+
+def plot_fbank():
+    """
+    Visualises the Filter Bank
+    """
+    n_fft = 256
+    sample_rate = 6000
+
+    fbank = functional.melscale_fbanks(
+        int(n_fft // 2 + 1),
+        n_mels=64,
+        f_min=0.0,
+        f_max=sample_rate / 2.0,
+        sample_rate=sample_rate,
+        norm="slaney",
+    )
+
+    _, axs = plt.subplots(1, 1)
+    axs.set_title("Filter bank")
+    axs.imshow(fbank, aspect="auto")
+    axs.set_ylabel("frequency bin")
+    axs.set_xlabel("mel bin")
 
 
 def plot_spectrum(musicdata):
@@ -60,7 +64,7 @@ def plot_spectrum(musicdata):
     Visualises the spectrum
     """
     fourier_transform = np.abs(
-        librosa.stft(musicdata.timeseries[:N_FFT], hop_length=N_FFT + 1)
+        librosa.stft(musicdata.waveform[:N_FFT], hop_length=N_FFT + 1)
     )
     plt.figure(figsize=(12, 4))
     plt.plot(fourier_transform)
@@ -74,39 +78,62 @@ def plot_spectogram(musicdata, log=False):
     """
     Visualises the spectrogram
     """
-    stft_audio = librosa.stft(musicdata.timeseries, n_fft=N_FFT, hop_length=HOP_LENGTH)
-    db_data = librosa.power_to_db(np.abs(stft_audio) ** 2)
+    spectrogram = transforms.Spectrogram(n_fft=N_FFT)
+    spec = spectrogram(musicdata.waveform)
     plt.figure(figsize=(12, 4))
     if log:
-        librosa.display.specshow(
-            db_data,
-            sr=musicdata.sample_rate,
-            hop_length=HOP_LENGTH,
-            x_axis="time",
-            y_axis="log",
+        plt.ylabel("freq_bin")
+        plt.imshow(
+            librosa.power_to_db(spec[0]),
+            origin="lower",
+            aspect="auto",
+            interpolation="nearest",
         )
     else:
-        librosa.display.specshow(
-            db_data,
-            sr=musicdata.sample_rate,
-            hop_length=HOP_LENGTH,
-            x_axis="time",
-            y_axis="linear",
+        plt.ylabel("freq_bin")
+        plt.imshow(
+            librosa.power_to_db(spec[0]),
+            origin="lower",
+            aspect="auto",
+            interpolation="nearest",
         )
-    plt.colorbar(format="%+2.0f dB")
+    # plt.colorbar(format="%+2.0f dB")
     plt.show()
 
 
-def calculate_mfccs(musicdata, visualise=False):
+def calculate_mfccs(musicdata):
     """
-    Visualises the Mel-frequency cepstral coefficients (MFCC) plot
+    Calculates the Mel-frequency cepstral coefficients (MFCC) of the waveform for the music data
     """
-    plt.figure(figsize=(12, 4))
-    mfccs = librosa.feature.mfcc(
-        y=musicdata.timeseries, sr=musicdata.sample_rate, n_mfcc=13
-    )  # computed MFCCs over frames.
-    if visualise:
-        librosa.display.specshow(mfccs, sr=musicdata.sample_rate, x_axis="time")
-        plt.colorbar(format="%+2.0f dB")
-        plt.show()
-    return mfccs
+    transform = transforms.MFCC(
+        sample_rate=musicdata.sample_rate,
+        n_mfcc=13,
+        melkwargs={"n_fft": 400, "hop_length": 160, "n_mels": 23, "center": False},
+    )
+    mfcc = transform(musicdata.waveform)
+    return mfcc
+
+
+def calculate_db(musicdata):
+    """
+    Calculates the DB from amplitude for the waveform
+    """
+    amplitudetodb = transforms.AmplitudeToDB(stype="amplitude", top_db=80)
+    spec = amplitudetodb(musicdata.waveform)
+    return spec
+
+
+def calculate_zero_crossing_rate(musicdata):
+    """
+    Calculates the zero crossing rate for the waveform
+    """
+    return librosa.feature.zero_crossing_rate(musicdata.waveform.numpy())
+
+
+def calculate_chromagram(musicdata):
+    """
+    Calculates the chromagram for the waveform
+    """
+    return librosa.feature.chroma_stft(
+        y=musicdata.waveform.numpy(), sr=musicdata.sample_rate
+    )
