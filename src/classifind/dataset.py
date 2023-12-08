@@ -43,7 +43,7 @@ class ClassicalMusicDataset:
 
 class MusicData:
     """
-    Defines the basic structure of the music data that includes the timeseries data, sample rate,
+    Defines the basic structure of the music data that includes the waveform data, sample rate,
     duration (in ms) and tempo (in BPMs)
     """
 
@@ -53,33 +53,33 @@ class MusicData:
         seg_no,
         composer,
         composer_enc,
-        timeseries,
+        waveform,
         sample_rate,
-        start_time,
-        end_time,
+        start_sample,
+        end_sample,
     ):
         self.title = title
         self.segment_no = seg_no
         self.composer = composer
         self.composer_encoded = composer_enc
-        self.timeseries = timeseries
+        self.waveform = waveform
         self.sample_rate = sample_rate
-        self.start_time = start_time
-        self.end_time = end_time
+        self.start_sample = start_sample
+        self.end_sample = end_sample
 
     def get_tempo(self):
         """
         Calculates the tempo (in BPMs) for the track
         """
-        tempo, _ = librosa.beat.beat_track(y=self.timeseries, sr=self.sample_rate)
+        tempo, _ = librosa.beat.beat_track(y=self.waveform, sr=self.sample_rate)
         logging.info("Estimated tempo: %.2f beats per minute", tempo)
         return tempo
 
     def get_duration(self):
         """
-        Gets the duration of the song
+        Gets the duration of the song in seconds
         """
-        return librosa.get_duration(y=self.timeseries)
+        return self.waveform.size(1) // self.sample_rate
 
     def get_encoded_label(self):
         """

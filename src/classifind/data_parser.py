@@ -4,10 +4,8 @@ Data parser
 import os
 import logging
 from pathlib import Path
-import numpy as np
 import pandas as pd
-import librosa
-import librosa.display
+import torchaudio
 from classifind.dataset import ClassicalMusicDataset, MusicData
 
 SPLIT_DURATION = 30
@@ -58,25 +56,18 @@ def split_audiofile(path, row):
     filename = row["filename"]
     composer = row["composer"]
     composer_enc = row["composer_enc"]
-    timeseries, sample_rate = librosa.load(path)
-    duration = librosa.get_duration(y=timeseries)
+    waveform, sample_rate = torchaudio.load(path)
 
     # Calculate the number of segments
-    num_segments = int(np.ceil(duration / SPLIT_DURATION))
+    num_segments = waveform.size(1) // (SPLIT_DURATION * sample_rate)
 
     for i in range(num_segments):
         # Calculate start and end times for each segment
-        start_time = i * SPLIT_DURATION
-        end_time = min((i + 1) * SPLIT_DURATION, duration)
+        start_sample = i * SPLIT_DURATION * sample_rate
+        end_sample = min((i + 1) * SPLIT_DURATION * sample_rate, waveform.size(1))
 
         # Extract the segment from the audio
-        segment = timeseries[
-            int(start_time * sample_rate) : int(end_time * sample_rate)
-        ]
-
-        # # Save the segment as a new WAV file
-        # segment_output_path = f"{output_path}_segment_{i + 1}.wav"
-        # librosa.output.write_wav(segment_output_path, segment, musicdata.sample_rate)
+        segment = waveform[:, int(start_sample) : int(end_sample)]
 
         musicdata = MusicData(
             filename,
@@ -85,8 +76,8 @@ def split_audiofile(path, row):
             composer_enc,
             segment,
             sample_rate,
-            start_time,
-            end_time,
+            start_sample,
+            end_sample,
         )
         segments.append(musicdata)
     return segments
