@@ -6,7 +6,7 @@ import librosa
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torchaudio import functional, transforms
+from torchaudio import transforms
 
 N_FFT = 2048
 HOP_LENGTH = 512
@@ -16,47 +16,6 @@ RAW_PATH = Path("data/raw/classical_music_files")
 PROCESSED_PATH = Path("data/processed/classical_music_files")
 FULL_RAW_PATH = ABSOLUTE_PATH.joinpath(RAW_PATH)
 FULL_PROCESSED_PATH = ABSOLUTE_PATH.joinpath(PROCESSED_PATH)
-
-
-def plot_waveform(waveform, sample_rate):
-    """
-    Visualises the wave of the plot
-    """
-    waveform = waveform.numpy()
-
-    num_channels, num_frames = waveform.shape
-    time_axis = torch.arange(0, num_frames) / sample_rate
-
-    _, axes = plt.subplots(num_channels, 1)
-    axes.plot(time_axis, waveform[0], linewidth=1)
-    axes.grid(True)
-    axes.set_xlim([0, time_axis[-1]])
-    axes.set_xlabel("Time (seconds)")
-    axes.set_title("Waveform plot")
-    plt.show()
-
-
-def plot_fbank():
-    """
-    Visualises the Filter Bank
-    """
-    n_fft = 256
-    sample_rate = 6000
-
-    fbank = functional.melscale_fbanks(
-        int(n_fft // 2 + 1),
-        n_mels=64,
-        f_min=0.0,
-        f_max=sample_rate / 2.0,
-        sample_rate=sample_rate,
-        norm="slaney",
-    )
-
-    _, axs = plt.subplots(1, 1)
-    axs.set_title("Filter bank")
-    axs.imshow(fbank, aspect="auto")
-    axs.set_ylabel("frequency bin")
-    axs.set_xlabel("mel bin")
 
 
 def plot_spectrum(musicdata):
@@ -74,30 +33,30 @@ def plot_spectrum(musicdata):
     plt.show()
 
 
-def plot_spectogram(musicdata, log=False):
+def plot_waveform_spectogram(musicdata):
     """
-    Visualises the spectrogram
+    Visualises the waveform and the spectrogram in one plot
     """
     spectrogram = transforms.Spectrogram(n_fft=N_FFT)
     spec = spectrogram(musicdata.waveform)
-    plt.figure(figsize=(12, 4))
-    if log:
-        plt.ylabel("freq_bin")
-        plt.imshow(
-            librosa.power_to_db(spec[0]),
-            origin="lower",
-            aspect="auto",
-            interpolation="nearest",
-        )
-    else:
-        plt.ylabel("freq_bin")
-        plt.imshow(
-            librosa.power_to_db(spec[0]),
-            origin="lower",
-            aspect="auto",
-            interpolation="nearest",
-        )
-    # plt.colorbar(format="%+2.0f dB")
+    fig, axes = plt.subplots(2, 1)
+    waveform = musicdata.waveform.numpy()
+    _, num_frames = waveform.shape
+    time_axis = torch.arange(0, num_frames) / musicdata.sample_rate
+    axes[0].plot(time_axis, waveform[0], linewidth=1)
+    axes[0].grid(True)
+    axes[0].set_xlim([0, time_axis[-1]])
+    axes[0].set_xlabel("Time (secs)")
+    axes[0].set_title("Original Waveform")
+    axes[1].imshow(
+        librosa.power_to_db(spec[0]),
+        origin="lower",
+        aspect="auto",
+        interpolation="nearest",
+    )
+    axes[1].set_title("Spectrogram")
+    axes[1].set_ylabel("Frequency Bin")
+    fig.tight_layout()
     plt.show()
 
 
