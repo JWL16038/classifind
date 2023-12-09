@@ -1,6 +1,7 @@
 """
 Feature extractor
 """
+import logging
 from pathlib import Path
 import librosa
 import matplotlib.pyplot as plt
@@ -26,6 +27,8 @@ class FeatureAnalyser:
     def __init__(self, musicdata):
         self.waveform = musicdata.waveform
         self.sample_rate = musicdata.sample_rate
+        self.orig_min = self.waveform.numpy().min()
+        self.orig_max = self.waveform.numpy().max()
 
     def plot_spectrum(self):
         """
@@ -98,3 +101,29 @@ class FeatureAnalyser:
         Calculates the chromagram for the waveform
         """
         return librosa.feature.chroma_stft(y=self.waveform.numpy(), sr=self.sample_rate)
+
+    def normalise(self, new_min, new_max):
+        """
+        https://github.com/musikalkemist/generating-sound-with-neural-networks/blob/4e71d22683edb9bd56aa46de3f022f4e1dec1cf1/12%20Preprocessing%20pipeline/preprocess.py#L70
+        """
+        array = self.waveform.numpy()
+        normalised = (array - array.min()) / (array.max() - array.min())
+        normalised = normalised * (new_max - new_min) + new_min
+        self.waveform = torch.from_numpy(normalised)
+        logging.debug(
+            "Before normalisation: %s, After normalisation: %s", array, self.waveform
+        )
+
+    def denormalise(self):
+        """
+        https://github.com/musikalkemist/generating-sound-with-neural-networks/blob/4e71d22683edb9bd56aa46de3f022f4e1dec1cf1/12%20Preprocessing%20pipeline/preprocess.py#L70
+        """
+        array = self.waveform.numpy()
+        denormalised = (array - array.min()) / (array.max() - array.min())
+        denormalised = denormalised * (self.orig_max - self.orig_min) + self.orig_min
+        self.waveform = torch.from_numpy(denormalised)
+        logging.debug(
+            "Before denormalisation: %s, After denormalisation: %s",
+            array,
+            self.waveform,
+        )

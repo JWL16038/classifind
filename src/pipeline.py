@@ -13,11 +13,14 @@ def run_pipeline():
     df = data_parser.read_metadata(sample_amount=0.01)
     data = data_parser.process_audiofiles(df)
     logging.info("Number of instances in dataset: %s", data.num_instances())
-    for i in data.dataset:
-        analyser = FeatureAnalyser(data.get_instance(i))
-        analyser.plot_waveform_spectogram()
-        analyser.calculate_mfccs()
-        analyser.calculate_chromagram()
+    # for i in data.dataset:
+    analyser = FeatureAnalyser(data.get_instance(0))
+    analyser.normalise(0, 1)
+    analyser.plot_waveform_spectogram()
+    analyser.denormalise()
+    analyser.plot_waveform_spectogram()
+    # analyser.calculate_mfccs()
+    # analyser.calculate_chromagram()
 
 
 if __name__ == "__main__":
