@@ -2,7 +2,8 @@
 Main script to run the ClassiFind Pipeline
 """
 import logging
-from classifind import data_parser, feature_analyser
+from classifind import data_parser
+from classifind.feature_analyser import FeatureAnalyser
 
 
 def run_pipeline():
@@ -13,8 +14,10 @@ def run_pipeline():
     data = data_parser.process_audiofiles(df)
     logging.info("Number of instances in dataset: %s", data.num_instances())
     for i in data.dataset:
-        feature_analyser.calculate_mfccs(data.get_instance(i))
-        feature_analyser.calculate_chromagram(data.get_instance(i))
+        analyser = FeatureAnalyser(data.get_instance(i))
+        analyser.plot_waveform_spectogram()
+        analyser.calculate_mfccs()
+        analyser.calculate_chromagram()
 
 
 if __name__ == "__main__":
