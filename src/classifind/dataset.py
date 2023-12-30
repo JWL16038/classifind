@@ -5,42 +5,6 @@ import logging
 import librosa
 
 
-class ClassicalMusicDataset:
-    """
-    Represents the whole music dataset
-    """
-
-    def __init__(self):
-        self.dataset = {}
-
-    def num_instances(self):
-        """
-        Gets the number of instances in this dataset
-        """
-        return len(self.dataset)
-
-    def add_instance(self, musicdata):
-        """
-        Adds an instance
-        """
-        index = len(self.dataset)
-        self.dataset[index] = musicdata
-
-    def add_segments(self, segments):
-        """
-        Adds segments of an audio file (via split_audiofile)
-        """
-        for i in segments:
-            index = len(self.dataset)
-            self.dataset[index] = i
-
-    def get_instance(self, index):
-        """
-        Gets an instance by index
-        """
-        return self.dataset.get(index)
-
-
 class MusicData:
     """
     Defines the basic structure of the music data that includes the waveform data, sample rate,
@@ -86,3 +50,37 @@ class MusicData:
         Gets the encoded label of the composer's name
         """
         return self.composer_encoded
+
+
+class ClassicalMusicDataset:
+    """
+    Represents the whole music dataset
+    """
+
+    def __init__(self):
+        self.dataset = []
+
+    def num_instances(self) -> int:
+        """
+        Gets the number of instances in this dataset
+        """
+        return len(self.dataset)
+
+    def add_instance(self, musicdata):
+        """
+        Adds an instance
+        """
+        self.dataset.append(musicdata)
+
+    def add_segments(self, segments):
+        """
+        Adds segments of an audio file (via split_audiofile)
+        """
+        for seg in segments:
+            self.dataset.append(seg)
+
+    def get_instance(self, index):
+        """
+        Gets an instance by index
+        """
+        return self.dataset[index]
