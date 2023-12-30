@@ -28,9 +28,9 @@ class FeatureExtractor:
         self.waveform = musicdata.waveform
         self.sample_rate = musicdata.sample_rate
 
-    def calculate_mfccs(self):
+    def extract_mfccs(self):
         """
-        Calculates the Mel-frequency cepstral coefficients (MFCC) of the waveform for the music data
+        Extracts the Mel-frequency cepstral coefficients (MFCC) of the waveform
         """
         transform = transforms.MFCC(
             sample_rate=self.sample_rate,
@@ -44,26 +44,40 @@ class FeatureExtractor:
         )
         return transform(self.waveform)
 
-    def calculate_db(self):
+    def extract_spectrogram(self, win_length=None, hop_length=None):
         """
-        Calculates the DB from amplitude for the waveform
+        Extracts the Spectrogram of the waveform
         """
-        amplitudetodb = transforms.AmplitudeToDB(stype="amplitude", top_db=80)
-        return amplitudetodb(self.waveform)
+        spectrogram = transforms.Spectrogram(
+            n_fft=N_FFT,
+            win_length=win_length,
+            hop_length=hop_length,
+            center=True,
+            pad_mode="reflect",
+            power=2.0,
+        )
+        return spectrogram(self.waveform)
 
-    def calculate_zero_crossing_rate(self):
+    def extract_melspectrogram(self, win_length=None, hop_length=None):
         """
-        Calculates the zero crossing rate for the waveform
+        Extracts the MelSpectrogram of the waveform
+        """
+        mel_spectrogram = transforms.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=N_FFT,
+            win_length=win_length,
+            hop_length=hop_length,
+            center=True,
+            pad_mode="reflect",
+            power=2.0,
+            norm="slaney",
+            onesided=True,
+            n_mels=N_MELS,
+            mel_scale="htk",
+        )
 
-        Indicates the number of times that a signal crosses the horizontal axis, i.e. the number of times that the amplitude reaches 0.
-        """
-        return librosa.feature.zero_crossing_rate(self.waveform.numpy())
-
-    def calculate_chromagram(self):
-        """
-        Calculates the chromagram for the waveform
-        """
-        return librosa.feature.chroma_stft(y=self.waveform.numpy(), sr=self.sample_rate)
+        melspec = mel_spectrogram(self.waveform)
+        return melspec
 
     def get_tempo(self):
         """
@@ -71,16 +85,55 @@ class FeatureExtractor:
         """
         return librosa.feature.tempo(y=self.waveform.numpy(), sr=self.sample_rate)
 
-    def calculate_tempogram(self):
+    def print_stats(self, src=None):
         """
-        Calculates the tempogram of the waveform
+        Prints the stats of the waveform
         """
-        oenv = librosa.onset.onset_strength(
-            y=self.waveform.numpy(), sr=self.sample_rate, hop_length=HOP_LENGTH
-        )
-        return librosa.feature.tempogram(
-            onset_envelope=oenv, sr=self.sample_rate, hop_length=HOP_LENGTH
-        )
+        if src:
+            print("-" * 10)
+            print("Source:", src)
+            print("-" * 10)
+        print("Sample Rate:", self.sample_rate)
+        print("Shape:", tuple(self.waveform.shape))
+        print("Dtype:", self.waveform.dtype)
+        print(f" - Max:     {self.waveform.max().item():6.3f}")
+        print(f" - Min:     {self.waveform.min().item():6.3f}")
+        print(f" - Mean:    {self.waveform.mean().item():6.3f}")
+        print(f" - Std Dev: {self.waveform.std().item():6.3f}")
+
+
+class FeatureAugmentator:
+    """
+    Class that contains all feature augmentation tools
+    """
+
+    def __init__(self, musicdata):
+        self.waveform = musicdata.waveform
+        self.sample_rate = musicdata.sample_rate
+
+    def apply_timestretch(self, rate=1.2):
+        """
+        Applies timestretch to the waveform
+        """
+        strech = transforms.TimeStretch()
+        spec = strech(self.waveform, rate)
+        return spec
+
+    def apply_timemasking(self, time_mask=80):
+        """
+        Applies time masking to the waveform
+        """
+        masking = transforms.TimeMasking(time_mask_param=time_mask)
+        spec = masking(self.waveform)
+        return spec
+
+    def apply_frequencymasking(self, time_mask=80):
+        """
+        Applies frequency masking to the waveform
+        """
+        masking = transforms.FrequencyMasking(freq_mask_param=time_mask)
+        spec = masking(self.waveform)
+        return spec
 
 
 class Normaliser:
