@@ -18,9 +18,11 @@ def run_pipeline():
         mfcc = extractor.extract_mfccs()
         spectrogram = extractor.extract_spectrogram()
         melspectrogram = extractor.extract_melspectrogram()
+        pitch = extractor.extract_pitch()
         logging.debug("Mfcc: %s", mfcc)
         logging.debug("Spectrogram: %s", spectrogram)
         logging.debug("Melspectrogram: %s", melspectrogram)
+        logging.debug("Pitch: %s", pitch)
         normaliser = Normaliser(data.get_instance(i))
         waveform = data.get_instance(i).waveform
         logging.debug("Norm: %s", waveform)

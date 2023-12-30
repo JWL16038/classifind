@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 import librosa
 import torch
-from torchaudio import transforms
+from torchaudio import transforms, functional
 
 N_FFT = 2048
 N_MFCC = 13
@@ -71,13 +71,19 @@ class FeatureExtractor:
             pad_mode="reflect",
             power=2.0,
             norm="slaney",
-            onesided=True,
             n_mels=N_MELS,
             mel_scale="htk",
         )
 
         melspec = mel_spectrogram(self.waveform)
         return melspec
+
+    def extract_pitch(self):
+        """
+        Extracts the pitch frequency of the waveform
+        """
+        pitch = functional.detect_pitch_frequency(self.waveform, self.sample_rate)
+        return pitch
 
     def get_tempo(self):
         """
