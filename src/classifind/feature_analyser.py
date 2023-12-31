@@ -1,10 +1,8 @@
 """
 Feature extractor
 """
-import logging
 from pathlib import Path
 import librosa
-import torch
 from torchaudio import transforms, functional
 
 N_FFT = 2048
@@ -106,84 +104,3 @@ class FeatureExtractor:
         print(f" - Min:     {self.waveform.min().item():6.3f}")
         print(f" - Mean:    {self.waveform.mean().item():6.3f}")
         print(f" - Std Dev: {self.waveform.std().item():6.3f}")
-
-
-class FeatureAugmentator:
-    """
-    Class that contains all feature augmentation tools
-    """
-
-    def __init__(self, musicdata):
-        self.waveform = musicdata.waveform
-        self.sample_rate = musicdata.sample_rate
-
-    def apply_timestretch(self, rate=1.2):
-        """
-        Applies timestretch to the waveform
-        """
-        strech = transforms.TimeStretch()
-        spec = strech(self.waveform, rate)
-        return spec
-
-    def apply_timemasking(self, time_mask=80):
-        """
-        Applies time masking to the waveform
-        """
-        masking = transforms.TimeMasking(time_mask_param=time_mask)
-        spec = masking(self.waveform)
-        return spec
-
-    def apply_frequencymasking(self, time_mask=80):
-        """
-        Applies frequency masking to the waveform
-        """
-        masking = transforms.FrequencyMasking(freq_mask_param=time_mask)
-        spec = masking(self.waveform)
-        return spec
-
-
-class Normaliser:
-    """
-    A normaliser that normalises the waveform to a specific range and back to the original min and max range.
-    """
-
-    def __init__(self, musicdata):
-        self.orig_min = musicdata.waveform.numpy().min()
-        self.orig_max = musicdata.waveform.numpy().max()
-        self.normalised = False
-
-    def normalise(self, waveform, new_min, new_max):
-        """
-        https://github.com/musikalkemist/generating-sound-with-neural-networks/blob/4e71d22683edb9bd56aa46de3f022f4e1dec1cf1/12%20Preprocessing%20pipeline/preprocess.py#L70
-        """
-        if self.normalised:
-            logging.debug("Waveform has already been normalised. Skipping.")
-            return waveform
-        array = waveform.numpy()
-        wave_norm = (array - array.min()) / (array.max() - array.min())
-        wave_norm = wave_norm * (new_max - new_min) + new_min
-        self.normalised = True
-        logging.debug(
-            "Before normalisation: %s, After normalisation: %s",
-            array,
-            torch.from_numpy(wave_norm),
-        )
-        return torch.from_numpy(wave_norm)
-
-    def denormalise(self, waveform):
-        """
-        https://github.com/musikalkemist/generating-sound-with-neural-networks/blob/4e71d22683edb9bd56aa46de3f022f4e1dec1cf1/12%20Preprocessing%20pipeline/preprocess.py#L70
-        """
-        if not self.normalised:
-            logging.debug("Waveform has not normalised. Skipping.")
-            return waveform
-        array = waveform.numpy()
-        denormalised = (array - array.min()) / (array.max() - array.min())
-        denormalised = denormalised * (self.orig_max - self.orig_min) + self.orig_min
-        self.normalised = False
-        logging.debug(
-            "Before denormalisation: %s, After denormalisation: %s",
-            array,
-            torch.from_numpy(denormalised),
-        )
-        return torch.from_numpy(denormalised)
