@@ -1,14 +1,13 @@
 """
 Data parser
 """
-import os
 import logging
+import os
 from pathlib import Path
 import pandas as pd
 import torchaudio
+from pydub import AudioSegment
 from classifind.dataset import ClassicalMusicDataset, MusicData
-
-SPLIT_DURATION = 30
 
 # =====================================
 # Paths
@@ -28,7 +27,7 @@ def process_audiofiles(dataframe):
     for _, row in dataframe.iterrows():
         path = FULL_RAW_PATH.joinpath(row["path"], row["filename"])
         logging.info("Processing: %s", row["filename"])
-        segments = split_audiofile(path, row)
+        segments = load_split_audiofile(path, row)
         dataset.add_segments(segments)
     return dataset
 
@@ -48,36 +47,79 @@ def read_metadata(sample_amount=None):
         raise error
 
 
-def split_audiofile(path, row):
+def detect_leading_silence(sound, silence_threshold=-50.0, chunk_size=10):
+    """
+    sound is a pydub.AudioSegment
+    silence_threshold in dB
+    chunk_size in ms
+
+    iterate over chunks until you find the first one with sound
+
+    https://stackoverflow.com/questions/29547218/remove-silence-at-the-beginning-and-at-the-end-of-wave-files-with-pydub
+    """
+    trim_ms = 0  # ms
+
+    assert chunk_size > 0  # to avoid infinite loop
+    while sound[
+        trim_ms : trim_ms + chunk_size
+    ].dBFS < silence_threshold and trim_ms < len(sound):
+        trim_ms += chunk_size
+
+    return trim_ms
+
+
+def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     """
     Splits the audio file into 30 second segments for training (this number can be changed).
     """
-    segments = []
-    filename = row["filename"]
-    composer = row["composer"]
-    composer_enc = row["composer_enc"]
-    waveform, sample_rate = torchaudio.load(path)
+    audio_chunks = []
 
-    # Calculate the number of segments
-    num_segments = waveform.size(1) // (SPLIT_DURATION * sample_rate)
+    if not os.path.isdir(FULL_PROCESSED_PATH.joinpath(entry["composer"])):
+        os.mkdir(FULL_PROCESSED_PATH.joinpath(entry["composer"]))
 
-    for i in range(num_segments):
-        # Calculate start and end times for each segment
-        start_sample = i * SPLIT_DURATION * sample_rate
-        end_sample = min((i + 1) * SPLIT_DURATION * sample_rate, waveform.size(1))
+    if path.with_suffix(".mp3"):
+        audio_segment = AudioSegment.from_mp3(path)
+    elif path.with_suffix(".wav"):
+        audio_segment = AudioSegment.from_wav(path)
+    else:
+        raise ValueError(f"File with path ({path}) extension not supported")
 
-        # Extract the segment from the audio
-        segment = waveform[:, int(start_sample) : int(end_sample)]
+    sample_rate = audio_segment.frame_rate
+    print(f"Sample rate: {sample_rate}")
 
+    # https://stackoverflow.com/questions/29547218/remove-silence-at-the-beginning-and-at-the-end-of-wave-files-with-pydub
+    start_trim = detect_leading_silence(audio_segment)
+    end_trim = detect_leading_silence(audio_segment.reverse())
+    duration = len(audio_segment)
+    audio_segment = audio_segment[start_trim : duration - end_trim]
+
+    split_duration_ms = split_duration * 1000
+    total_duration = len(audio_segment)
+
+    # Calculate the number of chunks
+    num_chunks = total_duration // split_duration_ms
+
+    # Iterate through the chunks and extract each segment
+    for i in range(num_chunks):
+        start_time = i * split_duration_ms
+        end_time = (i + 1) * split_duration_ms
+        new_filename = f"{entry['title']}_chunk_{i}.mp3"
+        path = FULL_PROCESSED_PATH.joinpath(
+            f"{entry['composer']}/{new_filename}"
+        ).as_posix()
+        if not os.path.isfile(path) or force_reload:
+            chunk = audio_segment[start_time:end_time]
+            chunk.export(path, format="mp3")
+        waveform, sample_rate = torchaudio.load(path)
         musicdata = MusicData(
-            filename,
+            entry["title"],
             i,
-            composer,
-            composer_enc,
-            segment,
+            entry["composer"],
+            entry["composer_enc"],
+            waveform,
             sample_rate,
-            start_sample,
-            end_sample,
+            start_time,
+            end_time,
         )
-        segments.append(musicdata)
-    return segments
+        audio_chunks.append(musicdata)
+    return audio_chunks
