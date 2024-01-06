@@ -4,8 +4,10 @@ Data parser
 import logging
 import os
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import torchaudio
+import noisereduce as nr
 from pydub import AudioSegment
 from classifind.dataset import ClassicalMusicDataset, MusicData
 
@@ -41,14 +43,38 @@ def read_metadata(sample_amount=None):
         csv = pd.read_csv(os.path.join(FULL_PROCESSED_PATH, "metadata.csv"))
         if sample_amount is not None:
             # Temporary code to grab X% of the dataset for testing purposes
-            csv = csv.sample(frac=sample_amount, random_state=0)
+            csv = csv.sample(frac=sample_amount, random_state=1)
         return csv
     except IOError as error:
         raise error
 
 
-def detect_leading_silence(sound, silence_threshold=-50.0, chunk_size=10):
+def denoise_audio(audio_segment, reduce_proportion=0.30):
     """
+    Removes as much noise from the audio segment using noisereduce
+    """
+    # Convert audio to numpy array
+    samples = np.array(audio_segment.get_array_of_samples())
+
+    reduced_noise = nr.reduce_noise(
+        samples,
+        sr=audio_segment.frame_rate,
+        prop_decrease=reduce_proportion,
+        use_torch=True,
+    )
+
+    # Convert reduced noise signal back to audio
+    return AudioSegment(
+        reduced_noise.tobytes(),
+        frame_rate=audio_segment.frame_rate,
+        sample_width=audio_segment.sample_width,
+        channels=audio_segment.channels,
+    )
+
+
+def detect_leading_silence(sound, silence_threshold=-32.0, chunk_size=10):
+    """
+    Detects leading silence in the audio clip
     sound is a pydub.AudioSegment
     silence_threshold in dB
     chunk_size in ms
@@ -64,7 +90,6 @@ def detect_leading_silence(sound, silence_threshold=-50.0, chunk_size=10):
         trim_ms : trim_ms + chunk_size
     ].dBFS < silence_threshold and trim_ms < len(sound):
         trim_ms += chunk_size
-
     return trim_ms
 
 
@@ -84,19 +109,13 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     else:
         raise ValueError(f"File with path ({path}) extension not supported")
 
-    sample_rate = audio_segment.frame_rate
-    print(f"Sample rate: {sample_rate}")
-
-    # https://stackoverflow.com/questions/29547218/remove-silence-at-the-beginning-and-at-the-end-of-wave-files-with-pydub
+    total_duration = len(audio_segment)
+    audio_segment = denoise_audio(audio_segment)
     start_trim = detect_leading_silence(audio_segment)
     end_trim = detect_leading_silence(audio_segment.reverse())
-    duration = len(audio_segment)
-    audio_segment = audio_segment[start_trim : duration - end_trim]
-
-    split_duration_ms = split_duration * 1000
-    total_duration = len(audio_segment)
-
+    trimmed_segment = audio_segment[start_trim : total_duration - end_trim]
     # Calculate the number of chunks
+    split_duration_ms = split_duration * 1000
     num_chunks = total_duration // split_duration_ms
 
     # Iterate through the chunks and extract each segment
@@ -108,7 +127,7 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
             f"{entry['composer']}/{new_filename}"
         ).as_posix()
         if not os.path.isfile(path) or force_reload:
-            chunk = audio_segment[start_time:end_time]
+            chunk = trimmed_segment[start_time:end_time]
             chunk.export(path, format="mp3")
         waveform, sample_rate = torchaudio.load(path)
         musicdata = MusicData(
