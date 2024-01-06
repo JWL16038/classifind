@@ -93,6 +93,15 @@ def detect_leading_silence(sound, silence_threshold=-32.0, chunk_size=10):
     return trim_ms
 
 
+def trim_audio(audio_segment, total_duration) -> AudioSegment:
+    """
+    Trims the audio clip for any beginning and ending silences
+    """
+    start_trim = detect_leading_silence(audio_segment)
+    end_trim = detect_leading_silence(audio_segment.reverse())
+    return audio_segment[start_trim : total_duration - end_trim]
+
+
 def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     """
     Splits the audio file into 30 second segments for training (this number can be changed).
@@ -111,9 +120,7 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
 
     total_duration = len(audio_segment)
     audio_segment = denoise_audio(audio_segment)
-    start_trim = detect_leading_silence(audio_segment)
-    end_trim = detect_leading_silence(audio_segment.reverse())
-    trimmed_segment = audio_segment[start_trim : total_duration - end_trim]
+    trimmed_segment = trim_audio(audio_segment, total_duration)
     # Calculate the number of chunks
     split_duration_ms = split_duration * 1000
     num_chunks = total_duration // split_duration_ms
