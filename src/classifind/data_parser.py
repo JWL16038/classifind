@@ -4,6 +4,7 @@ Data parser
 import logging
 import os
 from pathlib import Path
+from typing import cast
 import numpy as np
 import pandas as pd
 import torchaudio
@@ -49,7 +50,7 @@ def read_metadata(sample_amount=None):
         raise error
 
 
-def denoise_audio(audio_segment, reduce_proportion=0.30):
+def denoise_audio(audio_segment, reduce_proportion=0.30) -> AudioSegment:
     """
     Removes as much noise from the audio segment using noisereduce
     """
@@ -121,6 +122,7 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     total_duration = len(audio_segment)
     audio_segment = denoise_audio(audio_segment)
     trimmed_segment = trim_audio(audio_segment, total_duration)
+
     # Calculate the number of chunks
     split_duration_ms = split_duration * 1000
     num_chunks = total_duration // split_duration_ms
@@ -130,11 +132,12 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
         start_time = i * split_duration_ms
         end_time = (i + 1) * split_duration_ms
         new_filename = f"{entry['title']}_chunk_{i}.mp3"
-        path = FULL_PROCESSED_PATH.joinpath(
-            f"{entry['composer']}/{new_filename}"
-        ).as_posix()
+        path = rf"{FULL_PROCESSED_PATH.joinpath(entry['composer'])}/{new_filename}"
         if not os.path.isfile(path) or force_reload:
             chunk = trimmed_segment[start_time:end_time]
+            chunk = cast(
+                AudioSegment, chunk
+            )  # Sanity check that chunk is still an audiosegment to avoid type errors
             chunk.export(path, format="mp3")
         waveform, sample_rate = torchaudio.load(path)
         musicdata = MusicData(
