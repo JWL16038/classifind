@@ -2,6 +2,7 @@
 Data parser
 """
 import logging
+import math
 import os
 from pathlib import Path
 from typing import cast
@@ -153,7 +154,7 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
 
     # Calculate the number of chunks
     split_duration_ms = split_duration * 1000
-    num_chunks = total_duration // split_duration_ms
+    num_chunks = math.ceil(total_duration / split_duration_ms)
 
     # Iterate through the chunks and extract each segment
     for i in range(num_chunks):
