@@ -105,6 +105,13 @@ def trim_audio(audio_segment, total_duration) -> AudioSegment:
     return audio_segment[start_trim : total_duration - end_trim]
 
 
+def change_volume(audio_segment, vol_change=6):
+    """
+    Changes the volume of the audio segment
+    """
+    return audio_segment + vol_change
+
+
 def delete_all_chunks():
     """
     Wipes all chunks from the processed directory, while keeping the composer's subdirectories.
@@ -155,6 +162,7 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     total_duration = len(audio_segment)
     audio_segment = denoise_audio(audio_segment)
     trimmed_segment = trim_audio(audio_segment, total_duration)
+    trimmed_segment = change_volume(trimmed_segment)
 
     # Calculate the number of chunks
     split_duration_ms = split_duration * 1000
