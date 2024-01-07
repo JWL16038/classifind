@@ -103,6 +103,34 @@ def trim_audio(audio_segment, total_duration) -> AudioSegment:
     return audio_segment[start_trim : total_duration - end_trim]
 
 
+def delete_all_chunks():
+    """
+    Wipes all chunks from the processed directory, while keeping the composer's subdirectories.
+    """
+    for path, _, files in os.walk(FULL_PROCESSED_PATH):
+        for item in files:
+            if item.endswith(".mp3"):
+                os.remove(FULL_PROCESSED_PATH.joinpath(path, item))
+    logging.info("All chunks successfully deleted")
+
+
+def save_chunk(audio_segment, save_path, start_time, end_time, force_reload=False):
+    """
+    Saves the audio segment chunk in the specified path to save the audio chunk as an mp3 file.
+    """
+    path = rf"{FULL_PROCESSED_PATH.joinpath(save_path)}"
+    if not force_reload and os.path.isfile(path):
+        return
+    chunk = audio_segment[start_time:end_time]
+    chunk = cast(
+        AudioSegment, chunk
+    )  # Sanity check that chunk is still an audiosegment to avoid type errors
+    if os.path.isfile(path):
+        os.remove(path)
+    chunk.export(path, format="mp3")
+    logging.debug("Chunk successfully saved as %s", path)
+
+
 def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     """
     Splits the audio file into 30 second segments for training (this number can be changed).
@@ -131,15 +159,9 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     for i in range(num_chunks):
         start_time = i * split_duration_ms
         end_time = (i + 1) * split_duration_ms
-        new_filename = f"{entry['title']}_chunk_{i}.mp3"
-        path = rf"{FULL_PROCESSED_PATH.joinpath(entry['composer'])}/{new_filename}"
-        if not os.path.isfile(path) or force_reload:
-            chunk = trimmed_segment[start_time:end_time]
-            chunk = cast(
-                AudioSegment, chunk
-            )  # Sanity check that chunk is still an audiosegment to avoid type errors
-            chunk.export(path, format="mp3")
-        waveform, sample_rate = torchaudio.load(path)
+        save_path = f"{entry['composer']}/{entry['title']}_chunk_{i}.mp3"
+        save_chunk(trimmed_segment, save_path, start_time, end_time, force_reload)
+        waveform, sample_rate = torchaudio.load(FULL_PROCESSED_PATH.joinpath(save_path))
         musicdata = MusicData(
             entry["title"],
             i,
