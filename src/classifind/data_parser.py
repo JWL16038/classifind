@@ -5,6 +5,7 @@ import logging
 import math
 import os
 from pathlib import Path
+import re
 from typing import cast
 import numpy as np
 import pandas as pd
@@ -137,6 +138,9 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     Splits the audio file into 30 second segments for training (this number can be changed).
     """
     audio_chunks = []
+    # Obtaining and saving the new title with lowercase, spaces replaced with underscores and removing special characters
+    title = re.sub(':|,|"|', "", entry["title"])
+    title = title.replace(" ", "_").lower()
 
     if not os.path.isdir(FULL_PROCESSED_PATH.joinpath(entry["composer"])):
         os.mkdir(FULL_PROCESSED_PATH.joinpath(entry["composer"]))
@@ -160,7 +164,7 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     for i in range(num_chunks):
         start_time = i * split_duration_ms
         end_time = (i + 1) * split_duration_ms
-        save_path = f"{entry['composer']}/{entry['title']}_chunk_{i}.mp3"
+        save_path = f"{entry['composer']}/{title}_chunk_{i}.mp3"
         save_chunk(trimmed_segment, save_path, start_time, end_time, force_reload)
         waveform, sample_rate = torchaudio.load(FULL_PROCESSED_PATH.joinpath(save_path))
         musicdata = MusicData(
