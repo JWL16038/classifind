@@ -1,6 +1,7 @@
 .vscode
 
 data/raw/classical_music_files
+data/raw/noise
 
 *.csv
 

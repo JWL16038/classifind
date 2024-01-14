@@ -2,8 +2,10 @@
 Main script to run the ClassiFind Pipeline
 """
 import logging
+import torchaudio
 from classifind import data_parser
-from classifind.feature_analyser import FeatureExtractor, Normaliser
+from classifind.feature_analyser import FeatureExtractor
+from classifind.data_augmentator import RandomPitch, RandomSpeed, RandomBackgroundNoise
 
 
 def run_pipeline():
@@ -11,9 +13,18 @@ def run_pipeline():
     Executes the pipeline
     """
     df = data_parser.read_metadata(sample_amount=0.01)
+    df = df.head(1)
     data = data_parser.process_audiofiles(df)
     logging.info("Number of instances in dataset: %s", data.num_instances())
     for i in range(data.num_instances()):
+        inst = data.get_instance(i)
+        background_noise = RandomBackgroundNoise(inst.sample_rate)
+        out = background_noise(inst)
+        torchaudio.save("test.wav", out.waveform, out.sample_rate)
+        random_pitch = RandomPitch(inst.sample_rate)
+        out = random_pitch(inst)
+        random_speed = RandomSpeed(inst.sample_rate)
+        out = random_speed(inst)
         extractor = FeatureExtractor(data.get_instance(i))
         mfcc = extractor.extract_mfccs()
         spectrogram = extractor.extract_spectrogram()
@@ -23,11 +34,6 @@ def run_pipeline():
         logging.debug("Spectrogram: %s", spectrogram)
         logging.debug("Melspectrogram: %s", melspectrogram)
         logging.debug("Pitch: %s", pitch)
-        normaliser = Normaliser(data.get_instance(i))
-        waveform = data.get_instance(i).waveform
-        logging.debug("Norm: %s", waveform)
-        norm = normaliser.normalise(waveform, 0, 1)
-        logging.debug("Denorm: %s", normaliser.denormalise(norm))
 
 
 if __name__ == "__main__":
