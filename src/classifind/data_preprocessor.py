@@ -110,18 +110,27 @@ class RandomBackgroundNoise:
 
     def __call__(self, musicdata):
         audio_length = musicdata.waveform.shape[-1]
-        noise, noise_length = self.get_random_noise()
-        total_noise_len = noise_length
-
+        rand_int = random.randrange(10)
+        if rand_int >= 5:
+            noise, noise_length = self.get_random_noise()
+            total_noise_len = noise_length
+        else:
+            noise = torch.zeros(1, random.randrange(3000, 50000))
+            total_noise_len = 0
         # Continue adding random noise files until the entire waveform is filled
         while total_noise_len < audio_length:
-            new_noise, new_noise_length = self.get_random_noise()
-            noise = torch.cat([noise, new_noise], dim=-1)
-            total_noise_len += new_noise_length
+            rand_int = random.randrange(10)
+            if rand_int >= 5:
+                new_noise, new_noise_length = self.get_random_noise()
+                noise = torch.cat([noise, new_noise], dim=-1)
+                total_noise_len += new_noise_length
+            else:
+                total_noise_len += random.randrange(3000, 10000)
 
         # Trim the noise if it's longer than the audio
         if noise.shape[-1] > audio_length:
             noise = noise[..., :audio_length]
+
         snr_db = random.randint(self.min_snr_db, self.max_snr_db)
         snr = math.exp(snr_db / 10)
         audio_power = musicdata.waveform.norm(p=2)
