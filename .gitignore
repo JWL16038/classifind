@@ -2,6 +2,7 @@
 
 data/raw/classical_music_files
 data/raw/noise
+data/raw/ARCA23K
 
 *.csv
 

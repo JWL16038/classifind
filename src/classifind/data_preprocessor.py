@@ -6,13 +6,17 @@ import math
 from pathlib import Path
 import random
 from glob import glob
+import pandas as pd
 from torchaudio import transforms
 import torch
 import torchaudio
 
 ABSOLUTE_PATH = Path().resolve().parent
 NOISE_PATH = Path("data/raw/noise")
-FULL_NOISE_PATH = ABSOLUTE_PATH / NOISE_PATH
+ARCA23K_PATH = Path("data/raw/ARCA23K")
+SAMPLES_PATH = Path("data/processed/samples")
+FULL_NOISE_PATH = ABSOLUTE_PATH / ARCA23K_PATH  # NOISE_PATH
+FULL_SAMPLES_PATH = ABSOLUTE_PATH / SAMPLES_PATH
 
 
 class RandomPitch:
@@ -100,46 +104,78 @@ class RandomBackgroundNoise:
     https://jonathanbgn.com/2021/08/30/audio-augmentation.html
     """
 
-    def __init__(self, sample_rate, min_snr_db=0, max_snr_db=15):
+    def __init__(self, sample_rate, save_sample=False, min_snr_db=0, max_snr_db=15):
         self.sample_rate = sample_rate
+        self.save_sample = save_sample
         self.min_snr_db = min_snr_db
         self.max_snr_db = max_snr_db
-        self.noise_files = glob(
-            str(FULL_NOISE_PATH.joinpath("**/*.wav")), recursive=True
+        metadata = pd.read_csv(
+            FULL_NOISE_PATH.joinpath("metadata.csv"), dtype={"fname": "str"}
         )
+        exclude_list = [
+            "Acoustic_guitar",
+            "Bass_guitar",
+            "Bowed_string_instrument",
+            "Crash_cymbal",
+            "Electric_guitar",
+            "Female_singing",
+            "Gong",
+            "Harp",
+            "Organ",
+            "Piano",
+            "Rattle_(instrument)",
+            "Snare_drum",
+            "Train",
+            "Trumpet",
+            "Wind_instrument_and_woodwind_instrument",
+        ]
+        metadata = metadata[~metadata["label"].isin(exclude_list)]
+        noise_files = glob(str(FULL_NOISE_PATH.joinpath("**/*.wav")), recursive=True)
+        self.noise_files = [
+            fpath
+            for fpath in noise_files
+            if Path(fpath).stem in metadata["fname"].values
+        ]
 
-    def __call__(self, musicdata):
+    def __call__(self, musicdata, prob_threshold=0.35):
         audio_length = musicdata.waveform.shape[-1]
-        rand_int = random.randrange(10)
-        if rand_int >= 5:
-            noise, noise_length = self.get_random_noise()
-            total_noise_len = noise_length
+        if random.random() <= prob_threshold:
+            noise, _ = self.get_random_noise(musicdata.waveform)
         else:
-            noise = torch.zeros(1, random.randrange(3000, 50000))
-            total_noise_len = 0
+            # Fill the noise waveform with empty silence anywhere between 3 to 10 seconds
+            noise = torch.zeros(1, random.randrange(3000, 10000))
         # Continue adding random noise files until the entire waveform is filled
-        while total_noise_len < audio_length:
-            rand_int = random.randrange(10)
-            if rand_int >= 5:
-                new_noise, new_noise_length = self.get_random_noise()
+        while noise.shape[-1] <= audio_length:
+            if random.random() <= prob_threshold:
+                new_noise, _ = self.get_random_noise(musicdata.waveform)
                 noise = torch.cat([noise, new_noise], dim=-1)
-                total_noise_len += new_noise_length
             else:
-                total_noise_len += random.randrange(3000, 10000)
+                # Fill the noise waveform with empty silence anywhere between 3 to 10 seconds
+                noise = torch.cat(
+                    [noise, torch.zeros(1, random.randrange(3000, 10000))], dim=-1
+                )
 
         # Trim the noise if it's longer than the audio
         if noise.shape[-1] > audio_length:
             noise = noise[..., :audio_length]
 
-        snr_db = random.randint(self.min_snr_db, self.max_snr_db)
-        snr = math.exp(snr_db / 10)
+        snr = math.exp(random.randint(self.min_snr_db, self.max_snr_db) / 10)
         audio_power = musicdata.waveform.norm(p=2)
         noise_power = noise.norm(p=2)
-        scale = snr * noise_power / audio_power
+        scale = snr * (noise_power / audio_power)
+        assert (
+            noise.shape[-1] == audio_length
+        ), "Length of noise doesn't align with the audio length"
         musicdata.waveform = (scale * musicdata.waveform + noise) / 2
+        if self.save_sample:
+            torchaudio.save(
+                FULL_SAMPLES_PATH.joinpath("test.wav"),
+                musicdata.waveform,
+                musicdata.sample_rate,
+            )
         return musicdata
 
-    def get_random_noise(self):
+    def get_random_noise(self, waveform):
         """
         Gets a random noise audio file from the noise directory
         """
@@ -151,5 +187,10 @@ class RandomBackgroundNoise:
         noise, _ = torchaudio.sox_effects.apply_effects_file(
             random_noise_file, effects, normalize=True
         )
+        input_peak = torch.amax(noise.abs())
+        target_peak = torch.amax(waveform.abs())
+        gain_db = target_peak.item() - input_peak.item()
+        noise = torchaudio.functional.gain(noise, gain_db=gain_db)
+        logging.debug("Gain DB for noise: %s", gain_db)
         length = noise.shape[-1]
         return noise, length

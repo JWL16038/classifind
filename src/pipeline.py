@@ -2,10 +2,9 @@
 Main script to run the ClassiFind Pipeline
 """
 import logging
-import torchaudio
 from classifind import data_parser
 from classifind.feature_analyser import FeatureExtractor
-from classifind.data_augmentator import RandomPitch, RandomSpeed, RandomBackgroundNoise
+from classifind.data_preprocessor import RandomPitch, RandomSpeed, RandomBackgroundNoise
 
 
 def run_pipeline():
@@ -16,15 +15,15 @@ def run_pipeline():
     df = df.head(1)
     data = data_parser.process_audiofiles(df)
     logging.info("Number of instances in dataset: %s", data.num_instances())
-    for i in range(data.num_instances()):
+    for i in range(1):  # (data.num_instances()):
         inst = data.get_instance(i)
-        background_noise = RandomBackgroundNoise(inst.sample_rate)
+        background_noise = RandomBackgroundNoise(inst.sample_rate, True)
         out = background_noise(inst)
-        torchaudio.save("test.wav", out.waveform, out.sample_rate)
         random_pitch = RandomPitch(inst.sample_rate)
         out = random_pitch(inst)
         random_speed = RandomSpeed(inst.sample_rate)
         out = random_speed(inst)
+        print(out)
         extractor = FeatureExtractor(data.get_instance(i))
         mfcc = extractor.extract_mfccs()
         spectrogram = extractor.extract_spectrogram()
