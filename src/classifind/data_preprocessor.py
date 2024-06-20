@@ -3,13 +3,15 @@ The data augmentator used to create new audio files based on existing audio data
 """
 import logging
 import math
+import os
 from pathlib import Path
 import random
 from glob import glob
+import numpy as np
 import pandas as pd
+import torchaudio
 from torchaudio import transforms
 import torch
-import torchaudio
 
 ABSOLUTE_PATH = Path().resolve().parent
 NOISE_PATH = Path("data/raw/noise")
@@ -17,6 +19,37 @@ ARCA23K_PATH = Path("data/raw/ARCA23K")
 SAMPLES_PATH = Path("data/processed/samples")
 FULL_NOISE_PATH = ABSOLUTE_PATH / ARCA23K_PATH  # NOISE_PATH
 FULL_SAMPLES_PATH = ABSOLUTE_PATH / SAMPLES_PATH
+
+
+def save_sample(inst, directory, base_filename="file"):
+    """
+    Saves the given audio instance as a .wav file, incrementing the file name if one or more exist in the directory.
+
+    Parameters:
+    inst: The audio instance to be saved.
+    directory: The directory where the .wav file should be saved.
+    base_filename: The base name for the .wav file (default is 'file').
+    """
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    existing_files = os.listdir(directory)
+    counter = 1
+
+    # Find the next available filename
+    while True:
+        filename = f"{base_filename}{counter}.wav"
+        if filename not in existing_files:
+            break
+        counter += 1
+
+    filepath = os.path.join(directory, filename)
+    torchaudio.save(
+        filepath,
+        inst.waveform,
+        inst.sample_rate,
+    )
+    logging.info("Saved instance as %s", filepath)
 
 
 class RandomPitch:
@@ -96,15 +129,70 @@ class RandomSpeed:
         return self.speed_factor
 
 
-class RandomBackgroundNoise:
+class WhiteNoise:
     """
-    Applys a set of random background noise to the waveform.
+    Applies white background noise to the waveform.
 
     Function taken from
     https://jonathanbgn.com/2021/08/30/audio-augmentation.html
     """
 
-    def __init__(self, sample_rate, save_sample=False, min_snr_db=0, max_snr_db=15):
+    def __init__(self, sample_rate, min_snr_db=0, max_snr_db=15):
+        self.sample_rate = sample_rate
+        self.save_sample = save_sample
+        self.min_snr_db = min_snr_db
+        self.max_snr_db = max_snr_db
+
+    def __call__(self, musicdata):
+        std = torch.std(musicdata.waveform).item()
+        noise_std = random.uniform(self.min_snr_db * std, self.max_snr_db * std)
+
+        noise = np.random.normal(
+            0.0, noise_std, size=musicdata.waveform.shape[-1]
+        ).astype(np.float32)
+
+        musicdata.waveform += noise
+        return musicdata
+
+    def get_white_noise(self, musicdata):
+        """
+        Gets the white noise that was constructed using the music data
+        """
+        std = torch.std(musicdata.waveform).item()
+        noise_std = random.uniform(self.min_snr_db * std, self.max_snr_db * std)
+        noise = np.random.normal(
+            0.0, noise_std, size=musicdata.waveform.shape[-1]
+        ).astype(np.float32)
+        return noise
+
+
+class RandomBackgroundNoise:
+    """
+    Applies a set of random background noise to the waveform.
+
+    Function taken from
+    https://jonathanbgn.com/2021/08/30/audio-augmentation.html
+    """
+
+    exclude_list = [
+        "Acoustic_guitar",
+        "Bass_guitar",
+        "Bowed_string_instrument",
+        "Crash_cymbal",
+        "Electric_guitar",
+        "Female_singing",
+        "Gong",
+        "Harp",
+        "Organ",
+        "Piano",
+        "Rattle_(instrument)",
+        "Snare_drum",
+        "Train",
+        "Trumpet",
+        "Wind_instrument_and_woodwind_instrument",
+    ]
+
+    def __init__(self, sample_rate, min_snr_db=0, max_snr_db=15):
         self.sample_rate = sample_rate
         self.save_sample = save_sample
         self.min_snr_db = min_snr_db
@@ -112,24 +200,7 @@ class RandomBackgroundNoise:
         metadata = pd.read_csv(
             FULL_NOISE_PATH.joinpath("metadata.csv"), dtype={"fname": "str"}
         )
-        exclude_list = [
-            "Acoustic_guitar",
-            "Bass_guitar",
-            "Bowed_string_instrument",
-            "Crash_cymbal",
-            "Electric_guitar",
-            "Female_singing",
-            "Gong",
-            "Harp",
-            "Organ",
-            "Piano",
-            "Rattle_(instrument)",
-            "Snare_drum",
-            "Train",
-            "Trumpet",
-            "Wind_instrument_and_woodwind_instrument",
-        ]
-        metadata = metadata[~metadata["label"].isin(exclude_list)]
+        metadata = metadata[~metadata["label"].isin(self.exclude_list)]
         noise_files = glob(str(FULL_NOISE_PATH.joinpath("**/*.wav")), recursive=True)
         self.noise_files = [
             fpath
@@ -158,21 +229,18 @@ class RandomBackgroundNoise:
         # Trim the noise if it's longer than the audio
         if noise.shape[-1] > audio_length:
             noise = noise[..., :audio_length]
+        assert (
+            noise.shape[-1] == audio_length
+        ), "Length of noise doesn't align with the audio length"
+        noise *= 0.2
 
         snr = math.exp(random.randint(self.min_snr_db, self.max_snr_db) / 10)
         audio_power = musicdata.waveform.norm(p=2)
         noise_power = noise.norm(p=2)
         scale = snr * (noise_power / audio_power)
-        assert (
-            noise.shape[-1] == audio_length
-        ), "Length of noise doesn't align with the audio length"
-        musicdata.waveform = (scale * musicdata.waveform + noise) / 2
-        if self.save_sample:
-            torchaudio.save(
-                FULL_SAMPLES_PATH.joinpath("test.wav"),
-                musicdata.waveform,
-                musicdata.sample_rate,
-            )
+
+        musicdata.waveform = (scale * (musicdata.waveform + noise)) / 2
+        # musicdata.waveform += noise
         return musicdata
 
     def get_random_noise(self, waveform):
@@ -191,6 +259,6 @@ class RandomBackgroundNoise:
         target_peak = torch.amax(waveform.abs())
         gain_db = target_peak.item() - input_peak.item()
         noise = torchaudio.functional.gain(noise, gain_db=gain_db)
-        logging.debug("Gain DB for noise: %s", gain_db)
+        logging.debug("Gain DB for noise file %s: %s", random_noise_file, gain_db)
         length = noise.shape[-1]
         return noise, length
