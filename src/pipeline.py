@@ -2,40 +2,17 @@
 Main script to run the ClassiFind Pipeline
 """
 import logging
-import random
 from classifind import data_parser
 from classifind.feature_analyser import FeatureExtractor
 from classifind.data_preprocessor import (
-    WhiteNoise,
+    apply_random_effect,
+    save_sample,
+    ComposeTransform,
     RandomPitch,
     RandomSpeed,
+    WhiteNoise,
     RandomBackgroundNoise,
-    save_sample,
 )
-
-
-def apply_random_effect(inst, probability=0.5):
-    """
-    Randomly applies one of RandomBackgroundNoise, WhiteNoise, RandomPitch, or RandomSpeed
-    to an audio instance with a certain probability.
-
-    Parameters:
-    inst: The audio instance to be processed.
-    p: The probability with which to apply an effect (default is 0.5).
-
-    Returns:
-    The audio instance after applying the random effect.
-    """
-    if random.random() < probability:
-        effects = [
-            RandomBackgroundNoise(inst.sample_rate, True),
-            WhiteNoise(inst.sample_rate, True),
-            RandomPitch(inst.sample_rate),
-            RandomSpeed(inst.sample_rate),
-        ]
-        effect = random.choice(effects)
-        return effect(inst)
-    return inst
 
 
 def run_pipeline():
@@ -46,9 +23,21 @@ def run_pipeline():
     df = df.head(1)
     data = data_parser.process_audiofiles(df)
     logging.info("Number of instances in dataset: %s", data.num_instances())
+    compose = False
     for i in range(data.num_instances()):
         inst = data.get_instance(i)
-        proc_inst = apply_random_effect(inst, 0.75)
+        if compose:
+            c_transform = ComposeTransform(
+                [
+                    RandomPitch(inst.sample_rate),
+                    RandomSpeed(inst.sample_rate),
+                    WhiteNoise(inst.sample_rate),
+                    RandomBackgroundNoise(inst.sample_rate),
+                ]
+            )
+            proc_inst = c_transform(inst)
+        else:
+            proc_inst = apply_random_effect(inst, 0.75)
         save_sample(proc_inst, "../data/processed/samples", "sample")
         extractor = FeatureExtractor(proc_inst)
         mfcc = extractor.extract_mfccs()

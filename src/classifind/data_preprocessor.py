@@ -52,6 +52,53 @@ def save_sample(inst, directory, base_filename="file"):
     logging.info("Saved instance as %s", filepath)
 
 
+def apply_random_effect(inst, probability=0.5):
+    """
+    Randomly applies one of RandomBackgroundNoise, WhiteNoise, RandomPitch, or RandomSpeed
+    to an audio instance with a certain probability.
+
+    Parameters:
+    inst: The audio instance to be processed.
+    p: The probability with which to apply an effect (default is 0.5).
+
+    Returns:
+    The audio instance after applying the random effect.
+    """
+    if random.random() < probability:
+        effects = [
+            RandomBackgroundNoise(inst.sample_rate),
+            WhiteNoise(inst.sample_rate),
+            RandomPitch(inst.sample_rate),
+            RandomSpeed(inst.sample_rate),
+        ]
+        effect = random.choice(effects)
+        return effect(inst)
+    return inst
+
+
+class ComposeTransform:
+    """
+    Compose a list of functions to augment the instance
+
+    Function was taken from
+    https://jonathanbgn.com/2021/08/30/audio-augmentation.html
+    """
+
+    def __init__(self, functions):
+        self.functions = functions
+
+    def __call__(self, audio_data):
+        for func in self.functions:
+            audio_data = func(audio_data)
+        return audio_data
+
+    def get_transforms(self):
+        """
+        Gets all composed transform functions
+        """
+        return [type(func).__name__ for func in self.functions]
+
+
 class RandomPitch:
     """
     Apply a pitch change to the waveform
@@ -139,7 +186,6 @@ class WhiteNoise:
 
     def __init__(self, sample_rate, min_snr_db=0, max_snr_db=15):
         self.sample_rate = sample_rate
-        self.save_sample = save_sample
         self.min_snr_db = min_snr_db
         self.max_snr_db = max_snr_db
 
@@ -194,7 +240,6 @@ class RandomBackgroundNoise:
 
     def __init__(self, sample_rate, min_snr_db=0, max_snr_db=15):
         self.sample_rate = sample_rate
-        self.save_sample = save_sample
         self.min_snr_db = min_snr_db
         self.max_snr_db = max_snr_db
         metadata = pd.read_csv(
