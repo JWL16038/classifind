@@ -19,40 +19,32 @@ ARCA23K_PATH = Path("data/raw/ARCA23K")
 SAMPLES_PATH = Path("data/processed/samples")
 FULL_NOISE_PATH = ABSOLUTE_PATH / ARCA23K_PATH  # NOISE_PATH
 FULL_SAMPLES_PATH = ABSOLUTE_PATH / SAMPLES_PATH
+RELATIVE_PROCESSED_PATH = Path("data/processed/classical_music_files")
+FULL_PROCESSED_PATH = ABSOLUTE_PATH / RELATIVE_PROCESSED_PATH
 
 
-def save_sample(inst, directory, base_filename="file"):
+def save_processed_mp3(inst, save_path):
     """
-    Saves the given audio instance as a .wav file, incrementing the file name if one or more exist in the directory.
+    Saves the given audio instance as a .mp3 file, incrementing the file name if one or more exist in the directory.
 
     Parameters:
     inst: The audio instance to be saved.
-    directory: The directory where the .wav file should be saved.
-    base_filename: The base name for the .wav file (default is 'file').
+    directory: The directory where the .mp3 file should be saved.
+    base_filename: The base name for the .mp3 file (default is 'file').
     """
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    Path(os.path.join(FULL_PROCESSED_PATH, save_path)).parent.mkdir(
+        parents=True, exist_ok=True
+    )
 
-    existing_files = os.listdir(directory)
-    counter = 1
-
-    # Find the next available filename
-    while True:
-        filename = f"{base_filename}{counter}.wav"
-        if filename not in existing_files:
-            break
-        counter += 1
-
-    filepath = os.path.join(directory, filename)
     torchaudio.save(
-        filepath,
+        os.path.join(FULL_PROCESSED_PATH, save_path),
         inst.waveform,
         inst.sample_rate,
     )
-    logging.info("Saved instance as %s", filepath)
+    logging.info("Saved instance as %s", save_path)
 
 
-def apply_random_effect(inst, probability=0.5):
+def apply_random_effect(inst, probability=0.5, use_compose=False):
     """
     Randomly applies one of RandomBackgroundNoise, WhiteNoise, RandomPitch, or RandomSpeed
     to an audio instance with a certain probability.
@@ -65,6 +57,16 @@ def apply_random_effect(inst, probability=0.5):
     The audio instance after applying the random effect.
     """
     if random.random() < probability:
+        if use_compose:
+            c_transform = ComposeTransform(
+                [
+                    RandomPitch(inst.sample_rate),
+                    RandomSpeed(inst.sample_rate),
+                    WhiteNoise(inst.sample_rate),
+                    RandomBackgroundNoise(inst.sample_rate),
+                ]
+            )
+            return c_transform(inst)
         effects = [
             RandomBackgroundNoise(inst.sample_rate),
             WhiteNoise(inst.sample_rate),

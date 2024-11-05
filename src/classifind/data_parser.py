@@ -14,6 +14,11 @@ import noisereduce as nr
 from pydub import AudioSegment
 from classifind.dataset import ClassicalMusicDataset, MusicData
 
+from classifind.data_preprocessor import (
+    apply_random_effect,
+    save_processed_mp3,
+)
+
 # =====================================
 # Paths
 # =====================================
@@ -123,13 +128,12 @@ def delete_all_chunks():
     logging.info("All chunks successfully deleted")
 
 
-def save_chunk(audio_segment, save_path, start_time, end_time, force_reload=False):
+def save_temp_chunk(audio_segment, start_time, end_time):
     """
     Saves the audio segment chunk in the specified path to save the audio chunk as an mp3 file.
     """
-    path = rf"{FULL_PROCESSED_PATH.joinpath(save_path)}"
-    if not force_reload and os.path.isfile(path):
-        return
+    path = FULL_PROCESSED_PATH.joinpath("temp_chunk.mp3")
+    print(type(audio_segment))
     chunk = audio_segment[start_time:end_time]
     chunk = cast(
         AudioSegment, chunk
@@ -140,7 +144,7 @@ def save_chunk(audio_segment, save_path, start_time, end_time, force_reload=Fals
     logging.debug("Chunk successfully saved as %s", path)
 
 
-def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
+def load_split_audiofile(path, entry, split_duration=30, apply_effect=False):
     """
     Splits the audio file into 30 second segments for training (this number can be changed).
     """
@@ -172,9 +176,10 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
     for i in range(num_chunks):
         start_time = i * split_duration_ms
         end_time = (i + 1) * split_duration_ms
-        save_path = f"{entry['composer']}/{title}_chunk_{i}.mp3"
-        save_chunk(trimmed_segment, save_path, start_time, end_time, force_reload)
-        waveform, sample_rate = torchaudio.load(FULL_PROCESSED_PATH.joinpath(save_path))
+        save_temp_chunk(trimmed_segment, start_time, end_time)
+        waveform, sample_rate = torchaudio.load(
+            FULL_PROCESSED_PATH.joinpath("temp_chunk.mp3")
+        )
         musicdata = MusicData(
             entry["title"],
             i,
@@ -185,5 +190,9 @@ def load_split_audiofile(path, entry, split_duration=30, force_reload=False):
             start_time,
             end_time,
         )
+        if apply_effect:
+            musicdata = apply_random_effect(musicdata, 0.75)
+        save_path = f"{entry['composer']}/{title}_chunk_{i}.mp3"
+        save_processed_mp3(musicdata, save_path)
         audio_chunks.append(musicdata)
     return audio_chunks
