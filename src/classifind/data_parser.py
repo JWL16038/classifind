@@ -153,8 +153,8 @@ def load_split_audiofile(path, entry, split_duration=30, apply_effect=False):
     title = re.sub(':|,|"|', "", entry["title"])
     title = title.replace(" ", "_").lower()
 
-    if not os.path.isdir(FULL_PROCESSED_PATH.joinpath(entry["composer"])):
-        os.mkdir(FULL_PROCESSED_PATH.joinpath(entry["composer"]))
+    if not os.path.isdir(FULL_PROCESSED_PATH.joinpath(entry["composer"].lower())):
+        os.mkdir(FULL_PROCESSED_PATH.joinpath(entry["composer"].lower()))
 
     if path.with_suffix(".mp3"):
         audio_segment = AudioSegment.from_mp3(path)
@@ -192,7 +192,7 @@ def load_split_audiofile(path, entry, split_duration=30, apply_effect=False):
         )
         if apply_effect:
             musicdata = apply_random_effect(musicdata, 0.75)
-        save_path = f"{entry['composer']}/{title}_chunk_{i}.mp3"
+        save_path = f"{entry['composer'].lower()}/{title}_chunk_{i}.mp3"
         save_processed_mp3(musicdata, save_path)
         audio_chunks.append(musicdata)
     return audio_chunks
