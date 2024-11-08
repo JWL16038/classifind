@@ -178,7 +178,7 @@ def load_split_audiofile(path, entry, split_duration=30, apply_effect=False):
         end_time = (i + 1) * split_duration_ms
         save_temp_chunk(trimmed_segment, start_time, end_time)
         waveform, sample_rate = torchaudio.load(
-            FULL_PROCESSED_PATH.joinpath("temp_chunk.mp3")
+            str(FULL_PROCESSED_PATH.joinpath("temp_chunk.mp3"))
         )
         musicdata = MusicData(
             entry["title"],
