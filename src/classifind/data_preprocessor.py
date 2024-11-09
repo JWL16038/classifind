@@ -60,14 +60,14 @@ def apply_random_effect(inst, probability=0.5, use_compose=False):
                 [
                     RandomPitch(inst.sample_rate),
                     RandomBackgroundNoise(inst.sample_rate),
-                    RandomSpeed(inst.sample_rate),
+                    RandomTempo(inst.sample_rate),
                 ]
             )
             return c_transform(inst)
         effects = [
             RandomPitch(inst.sample_rate),
             RandomBackgroundNoise(inst.sample_rate),
-            RandomSpeed(inst.sample_rate),
+            RandomTempo(inst.sample_rate),
             WhiteNoise(inst.sample_rate),
         ]
         effect = random.choice(effects)
@@ -133,46 +133,46 @@ class RandomPitch:
         return self.pitch_step
 
 
-class RandomSpeed:
+class RandomTempo:
     """
-    Apply random speed change to the waveform
+    Applies random tempo change to the waveform.
 
-    Function taken from
+    The code to build this class was originally taken from
     https://jonathanbgn.com/2021/08/30/audio-augmentation.html
     """
 
     def __init__(self, sample_rate):
         self.sample_rate = sample_rate
-        self.speed_factor = None
+        self.tempo_factor = None
 
     def __call__(self, musicdata):
-        speed_factor = random.choice([0.8, 0.9, 1.0, 1.1, 1.2])
-        if speed_factor == 1.0:  # no change
+        tempo_factor = random.choice([0.8, 0.9, 1.0, 1.1, 1.2])
+        if tempo_factor == 1.0:  # no change
             return musicdata
-        # Change speed and resample to original rate:
+        # Change the tempo and resample to original rate:
         sox_effects = [
-            ["speed", str(speed_factor)],
+            ["tempo", str(tempo_factor)],
             ["rate", str(self.sample_rate)],
         ]
         transformed_audio, _ = torchaudio.sox_effects.apply_effects_tensor(
             musicdata.waveform, self.sample_rate, sox_effects
         )
-        self.speed_factor = speed_factor
+        self.tempo_factor = tempo_factor
         musicdata.waveform = transformed_audio
         logging.debug(
-            "Speed: %s, Duration: %s",
-            speed_factor,
+            "Tempo: %s, Duration: %s",
+            tempo_factor,
             transformed_audio.size(1) / self.sample_rate,
         )
         return musicdata
 
-    def get_current_speed_factor(self):
+    def get_current_tempo(self):
         """
-        Gets the current speed factor
+        Gets the current tempo factor
         """
-        if self.speed_factor is None:
+        if self.tempo_factor is None:
             return -1
-        return self.speed_factor
+        return self.tempo_factor
 
 
 class WhiteNoise:
