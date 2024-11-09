@@ -14,7 +14,7 @@ import noisereduce as nr
 from pydub import AudioSegment
 from classifind.dataset import ClassicalMusicDataset, MusicData
 
-from classifind.data_preprocessor import (
+from classifind.data_augmentation import (
     apply_random_effect,
     save_processed_mp3,
 )
