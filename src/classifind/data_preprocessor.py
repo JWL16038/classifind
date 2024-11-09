@@ -2,12 +2,10 @@
 The data augmentator used to create new audio files based on existing audio data.
 """
 import logging
-import math
 import os
 from pathlib import Path
 import random
 from glob import glob
-import numpy as np
 import pandas as pd
 import torchaudio
 from torchaudio import transforms
@@ -61,17 +59,16 @@ def apply_random_effect(inst, probability=0.5, use_compose=False):
             c_transform = ComposeTransform(
                 [
                     RandomPitch(inst.sample_rate),
-                    RandomSpeed(inst.sample_rate),
-                    WhiteNoise(inst.sample_rate),
                     RandomBackgroundNoise(inst.sample_rate),
+                    RandomSpeed(inst.sample_rate),
                 ]
             )
             return c_transform(inst)
         effects = [
-            RandomBackgroundNoise(inst.sample_rate),
-            WhiteNoise(inst.sample_rate),
             RandomPitch(inst.sample_rate),
+            RandomBackgroundNoise(inst.sample_rate),
             RandomSpeed(inst.sample_rate),
+            WhiteNoise(inst.sample_rate),
         ]
         effect = random.choice(effects)
         return effect(inst)
@@ -186,40 +183,73 @@ class WhiteNoise:
     https://jonathanbgn.com/2021/08/30/audio-augmentation.html
     """
 
-    def __init__(self, sample_rate, min_snr_db=0, max_snr_db=15):
+    def __init__(self, sample_rate, min_snr_db=15, max_snr_db=30):
         self.sample_rate = sample_rate
         self.min_snr_db = min_snr_db
         self.max_snr_db = max_snr_db
 
     def __call__(self, musicdata):
-        std = torch.std(musicdata.waveform).item()
-        noise_std = random.uniform(self.min_snr_db * std, self.max_snr_db * std)
+        # Calculate RMS of original signal
+        original_rms = torch.sqrt(torch.mean(musicdata.waveform**2))
 
-        noise = np.random.normal(
-            0.0, noise_std, size=musicdata.waveform.shape[-1]
-        ).astype(np.float32)
+        # Generate white noise
+        noise = torch.randn_like(musicdata.waveform)
+        noise_rms = torch.sqrt(torch.mean(noise**2))
 
-        musicdata.waveform += noise
+        # Calculate desired noise level based on random SNR
+        snr_db = random.uniform(self.min_snr_db, self.max_snr_db)
+        snr_linear = 10 ** (snr_db / 20)
+
+        # Scale noise to achieve desired SNR while preserving signal volume
+        scaling_factor = original_rms / (noise_rms * snr_linear)
+        scaled_noise = noise * scaling_factor
+
+        # Add scaled noise to original signal
+        musicdata.waveform = musicdata.waveform + scaled_noise
+
+        # Normalize to prevent clipping while preserving relative volume
+        max_val = torch.max(torch.abs(musicdata.waveform))
+        if max_val > 1.0:
+            musicdata.waveform = musicdata.waveform / max_val
+
         return musicdata
 
     def get_white_noise(self, musicdata):
         """
-        Gets the white noise that was constructed using the music data
+        Gets the white noise from the musicdata waveform.
         """
-        std = torch.std(musicdata.waveform).item()
-        noise_std = random.uniform(self.min_snr_db * std, self.max_snr_db * std)
-        noise = np.random.normal(
-            0.0, noise_std, size=musicdata.waveform.shape[-1]
-        ).astype(np.float32)
-        return noise
+        # Calculate RMS of original signal
+        original_rms = torch.sqrt(torch.mean(musicdata.waveform**2))
+
+        # Generate white noise
+        noise = torch.randn_like(musicdata.waveform)
+        noise_rms = torch.sqrt(torch.mean(noise**2))
+
+        # Calculate desired noise level based on random SNR
+        snr_db = random.uniform(self.min_snr_db, self.max_snr_db)
+        snr_linear = 10 ** (snr_db / 20)
+
+        # Scale noise to achieve desired SNR while preserving signal volume
+        scaling_factor = original_rms / (noise_rms * snr_linear)
+        scaled_noise = noise * scaling_factor
+        return scaled_noise
 
 
 class RandomBackgroundNoise:
     """
-    Applies a set of random background noise to the waveform.
+    Applies random background noise samples to the audio while preserving the original signal's volume.
+
+    The noise is selected from a collection of pre-recorded environmental sounds, excluding musical
+    instruments and similar sounds that could interfere with the classification task. The noise
+    is applied with gaps of silence and controlled SNR to create realistic background ambience.
 
     Function taken from
     https://jonathanbgn.com/2021/08/30/audio-augmentation.html
+
+    Attributes:
+        sample_rate (int): The sample rate of the audio
+        min_snr_db (float): Minimum signal-to-noise ratio in decibels
+        max_snr_db (float): Maximum signal-to-noise ratio in decibels
     """
 
     exclude_list = [
@@ -244,6 +274,8 @@ class RandomBackgroundNoise:
         self.sample_rate = sample_rate
         self.min_snr_db = min_snr_db
         self.max_snr_db = max_snr_db
+
+        # Load available noise files, excluding musical instruments
         metadata = pd.read_csv(
             FULL_NOISE_PATH.joinpath("metadata.csv"), dtype={"fname": "str"}
         )
@@ -256,43 +288,76 @@ class RandomBackgroundNoise:
         ]
 
     def __call__(self, musicdata, prob_threshold=0.35):
+        """
+        Applies random background noise to the audio while maintaining original signal volume.
+
+        Args:
+            musicdata: MusicData instance containing the waveform to be processed
+            prob_threshold (float): Probability of adding noise vs. silence at each segment
+
+        Returns:
+            MusicData: The processed audio with background noise added
+        """
         audio_length = musicdata.waveform.shape[-1]
-        if random.random() <= prob_threshold:
-            noise, _ = self.get_random_noise(musicdata.waveform)
-        else:
-            # Fill the noise waveform with empty silence anywhere between 3 to 10 seconds
-            noise = torch.zeros(1, random.randrange(3000, 10000))
-        # Continue adding random noise files until the entire waveform is filled
-        while noise.shape[-1] <= audio_length:
+        original_waveform = musicdata.waveform.clone()
+
+        # Generate noise sequence with silence gaps
+        noise = self._generate_noise_sequence(audio_length, prob_threshold)
+
+        # Calculate and apply SNR-based scaling
+        snr_db = random.uniform(self.min_snr_db, self.max_snr_db)
+        snr_linear = 10 ** (snr_db / 20)
+
+        signal_power = torch.mean(original_waveform**2)
+        noise_power = torch.mean(noise**2)
+        scaling_factor = torch.sqrt(signal_power / (noise_power * (snr_linear**2)))
+
+        scaled_noise = (
+            noise * scaling_factor * 0.3
+        )  # Additional reduction factor for subtlety
+
+        # Mix original audio with scaled noise
+        musicdata.waveform = original_waveform + scaled_noise
+
+        # Normalize to prevent clipping while preserving relative volume
+        max_val = torch.max(torch.abs(musicdata.waveform))
+        if max_val > 1.0:
+            musicdata.waveform = musicdata.waveform / max_val
+
+        return musicdata
+
+    def _generate_noise_sequence(self, target_length, prob_threshold):
+        """
+        Generates a sequence of background noise mixed with silence periods.
+
+        Args:
+            target_length (int): Desired length of the noise sequence in samples
+            prob_threshold (float): Probability of adding noise vs. silence at each segment
+
+        Returns:
+            torch.Tensor: Generated noise sequence
+        """
+        noise = torch.zeros(1, random.randrange(3000, 10000))
+
+        while noise.shape[-1] <= target_length:
             if random.random() <= prob_threshold:
-                new_noise, _ = self.get_random_noise(musicdata.waveform)
+                new_noise, _ = self.get_random_noise(noise)
                 noise = torch.cat([noise, new_noise], dim=-1)
             else:
-                # Fill the noise waveform with empty silence anywhere between 3 to 10 seconds
-                noise = torch.cat(
-                    [noise, torch.zeros(1, random.randrange(3000, 10000))], dim=-1
-                )
+                silence = torch.zeros(1, random.randrange(3000, 10000))
+                noise = torch.cat([noise, silence], dim=-1)
 
-        # Trim the noise if it's longer than the audio
-        if noise.shape[-1] > audio_length:
-            noise = noise[..., :audio_length]
-        assert (
-            noise.shape[-1] == audio_length
-        ), "Length of noise doesn't align with the audio length"
-        noise *= 0.2
-
-        snr = math.exp(random.randint(self.min_snr_db, self.max_snr_db) / 10)
-        audio_power = musicdata.waveform.norm(p=2)
-        noise_power = noise.norm(p=2)
-        scale = snr * (noise_power / audio_power)
-
-        musicdata.waveform = (scale * (musicdata.waveform + noise)) / 2
-        # musicdata.waveform += noise
-        return musicdata
+        return noise[..., :target_length]
 
     def get_random_noise(self, waveform):
         """
-        Gets a random noise audio file from the noise directory
+        Loads and preprocesses a random noise file from the available collection.
+
+        Args:
+            reference_waveform (torch.Tensor): Reference waveform for volume matching
+
+        Returns:
+            tuple: (preprocessed noise tensor, length of noise)
         """
         random_noise_file = random.choice(self.noise_files)
         effects = [
@@ -307,5 +372,4 @@ class RandomBackgroundNoise:
         gain_db = target_peak.item() - input_peak.item()
         noise = torchaudio.functional.gain(noise, gain_db=gain_db)
         logging.debug("Gain DB for noise file %s: %s", random_noise_file, gain_db)
-        length = noise.shape[-1]
-        return noise, length
+        return noise, noise.shape[-1]
