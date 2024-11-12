@@ -69,6 +69,9 @@ def apply_random_effect(inst, probability=0.5, use_compose=False):
             RandomBackgroundNoise(inst.sample_rate),
             RandomTempo(inst.sample_rate),
             WhiteNoise(inst.sample_rate),
+            ReverseAudio(),
+            RandomCrop(inst.sample_rate),
+            DistortionAudio(),
         ]
         effect = random.choice(effects)
         return effect(inst)
@@ -373,3 +376,201 @@ class RandomBackgroundNoise:
         noise = torchaudio.functional.gain(noise, gain_db=gain_db)
         logging.debug("Gain DB for noise file %s: %s", random_noise_file, gain_db)
         return noise, noise.shape[-1]
+
+
+class ReverseAudio:
+    """
+    Flips/reverses the waveform.
+
+    The code was originally taken from:
+    https://github.com/Spijkervet/torchaudio-augmentations/blob/master/torchaudio_augmentations/augmentations/reverse.py
+    """
+
+    def __call__(self, musicdata):
+        musicdata.waveform = torch.flip(musicdata.waveform, dims=[-1])
+        return musicdata
+
+    def get_reversed_waveform(self, musicdata):
+        """
+        Gets the reversed waveform
+
+        Parameters:
+            musicdata: MusicData instance containing the waveform to be processed
+
+        Returns:
+            MusicData: The processed audio with the reversed waveform
+        """
+        return torch.flip(musicdata.waveform, dims=[-1])
+
+
+class DistortionAudio:
+    """
+    Applies random distortion effect to the waveform using waveshaping.
+
+    Parameters:
+        min_drive (float): Minimum amount of distortion
+        max_drive (float): Maximum amount of distortion
+        mix (float): Mix between dry and wet signal (0.0 to 1.0)
+    """
+
+    def __init__(self, min_drive=3, max_drive=10, mix=0.5):
+        super().__init__()
+        self.min_drive = min_drive
+        self.max_drive = max_drive
+        self.mix = mix
+        self.current_drive = None
+
+    def get_random_drive(self):
+        """
+        Gets a random drive.
+        """
+        return random.uniform(self.min_drive, self.max_drive)
+
+    def waveshape(self, wave):
+        """
+        Gets the waveshape.
+
+        Parameters:
+            wave: The waveform to be processed
+        """
+        # Get new random drive value for each call
+        self.current_drive = self.get_random_drive()
+        # Apply non-linear distortion using tanh
+        return torch.tanh(wave * self.current_drive)
+
+    def __call__(self, musicdata):
+        """
+        Applies random distortion to the waveform.
+
+        Parameters:
+            musicdata: MusicData instance containing the waveform to be processed
+
+        Returns:
+            MusicData: The processed audio with the distorted waveform
+        """
+        # Normalize input
+        waveform = musicdata.waveform
+        max_val = torch.max(torch.abs(waveform))
+        normalized = waveform / max_val
+
+        # Apply distortion
+        distorted = self.waveshape(normalized)
+
+        # Mix dry and wet signals
+        mixed = (1 - self.mix) * normalized + self.mix * distorted
+
+        # Restore original scale
+        musicdata.waveform = mixed * max_val
+        return musicdata
+
+    def get_distorted_waveform(self, musicdata):
+        """
+        Gets the distorted waveform.
+
+        Parameters:
+            musicdata: MusicData instance containing the waveform to be processed
+
+        Returns:
+            MusicData: The processed audio with the distorted waveform
+        """
+        temp_data = musicdata
+        return self(temp_data).waveform
+
+
+class RandomCrop:
+    """
+    Randomly crops the audio waveform to a specified duration while preserving
+    the meaningful parts of the audio (avoiding silent sections).
+
+    The class uses an energy-based approach to identify non-silent sections and
+    ensures the crop includes meaningful audio content.
+
+    Attributes:
+        sample_rate (int): The sample rate of the audio
+        max_crop_seconds (float): Maximum duration to crop in seconds
+        min_crop_seconds (float): Minimum duration to crop in seconds
+        min_energy_threshold (float): Minimum energy threshold to consider a section non-silent
+        frame_length (int): Length of frames for energy calculation in samples
+    """
+
+    def __init__(
+        self,
+        sample_rate,
+        max_crop_seconds=30.0,
+        min_crop_seconds=15.0,
+        min_energy_threshold=0.01,
+        frame_length=2048,
+    ):
+        self.sample_rate = sample_rate
+        self.max_crop_samples = int(max_crop_seconds * sample_rate)
+        self.min_crop_samples = int(min_crop_seconds * sample_rate)
+        self.min_energy_threshold = min_energy_threshold
+        self.frame_length = frame_length
+
+    def __call__(self, musicdata):
+        """
+        Applies random cropping to the audio, avoiding silent sections.
+
+        Args:
+            musicdata: MusicData instance containing the waveform to be processed
+
+        Returns:
+            MusicData: The processed audio with cropped waveform
+        """
+        waveform = musicdata.waveform
+        total_samples = waveform.shape[-1]
+
+        # Ensure minimum length requirements
+        if total_samples <= self.min_crop_samples:
+            return musicdata
+
+        # Calculate energy per frame
+        frames = waveform.unfold(-1, self.frame_length, self.frame_length // 2)
+        frame_energies = torch.mean(frames**2, dim=1)
+
+        # Find frames with sufficient energy
+        valid_frames = torch.where(frame_energies > self.min_energy_threshold)[0]
+
+        if len(valid_frames) == 0:
+            # If no valid frames found, fall back to random crop
+            crop_length = random.randint(self.min_crop_samples, self.max_crop_samples)
+            start_idx = random.randint(0, total_samples - crop_length)
+        else:
+            # Random crop length between min and max
+            crop_length = random.randint(
+                self.min_crop_samples, min(self.max_crop_samples, total_samples)
+            )
+
+            # Convert frame indices to sample indices
+            valid_starts = valid_frames * (self.frame_length // 2)
+
+            # Filter valid start positions that allow for full crop length
+            valid_starts = valid_starts[valid_starts <= (total_samples - crop_length)]
+
+            if len(valid_starts) == 0:
+                # If no valid start positions, fall back to random crop
+                start_idx = random.randint(0, total_samples - crop_length)
+            else:
+                # Choose random start position from valid positions
+                start_idx = valid_starts[random.randint(0, len(valid_starts) - 1)]
+
+        # Apply the crop
+        musicdata.waveform = waveform[..., start_idx : start_idx + crop_length]
+
+        # Update start and end sample positions
+        musicdata.start_sample = start_idx
+        musicdata.end_sample = start_idx + crop_length
+
+        return musicdata
+
+    def get_current_crop_duration(self, musicdata):
+        """
+        Gets the duration of the current crop in seconds.
+
+        Args:
+            musicdata: MusicData instance containing the cropped waveform
+
+        Returns:
+            float: Duration of the crop in seconds
+        """
+        return musicdata.waveform.shape[-1] / self.sample_rate
